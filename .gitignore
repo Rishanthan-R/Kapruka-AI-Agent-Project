@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+.env*.local
+
+# Frontend specific overrides
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.production
+
+# Backend specific overrides
+backend/node_modules/
+backend/dist/
+backend/.env
+backend/.env.production
