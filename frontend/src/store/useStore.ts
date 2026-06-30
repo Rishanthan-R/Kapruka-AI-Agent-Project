@@ -248,7 +248,14 @@ export const useStore = create<AppState>()(
     }))
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+      let apiUrl = import.meta.env.VITE_API_URL;
+      if (!apiUrl) {
+        if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+          apiUrl = 'http://localhost:5000/api';
+        } else {
+          apiUrl = '/api';
+        }
+      }
       
       const response = await fetch(`${apiUrl}/chat/stream`, {
         method: 'POST',
