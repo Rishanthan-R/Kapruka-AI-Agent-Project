@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "nodemon --watch src -e ts --exec ts-node src/index.ts"
+    "dev": "nodemon --delay 2 --watch src -e ts --exec ts-node src/index.ts",
+    "test-chat": "node test_chat.js",
+    "test-hf": "node test_hf_tool.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
@@ -14,7 +16,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "kapruka-shopping-companion-root": "file:.."
+    "kapruka-shopping-companion-root": "file:..",
+    "openai": "^6.42.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

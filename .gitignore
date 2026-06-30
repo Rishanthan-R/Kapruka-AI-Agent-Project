@@ -14,3 +14,7 @@ backend/node_modules/
 backend/dist/
 backend/.env
 backend/.env.production
+
+# Test/debug scripts (may contain API keys)
+backend/test_*.js
+backend/src/test_*.ts

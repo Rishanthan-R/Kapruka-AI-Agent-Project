@@ -1,82 +1,155 @@
 import { Request, Response } from 'express'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import OpenAI from 'openai'
 import { config } from '../config/env'
 import { McpService } from '../services/mcpService'
 
-const genAI = new GoogleGenerativeAI(config.geminiApiKey || 'MOCK_KEY')
 const mcpService = McpService.getInstance()
 
-// Define function declarations for Gemini tool calling
-const shoppingTools: any = {
-  functionDeclarations: [
-    {
+// Dynamically configure the AI client and model at startup based on config
+let openai: OpenAI
+let modelName: string
+
+if (config.aiProvider === 'huggingface') {
+  console.log(`🤖 AI Provider: Hugging Face (Model: ${config.huggingfaceModel})`)
+  openai = new OpenAI({
+    apiKey: config.hfToken || 'MOCK_KEY',
+    baseURL: 'https://router.huggingface.co/v1'
+  })
+  modelName = config.huggingfaceModel
+} else if (config.aiProvider === 'openai') {
+  console.log(`🤖 AI Provider: OpenAI (Model: ${config.openaiModel})`)
+  openai = new OpenAI({
+    apiKey: config.openaiApiKey || 'MOCK_KEY'
+  })
+  modelName = config.openaiModel
+} else {
+  console.log(`🤖 AI Provider: Groq (Model: llama-3.3-70b-versatile)`)
+  openai = new OpenAI({
+    apiKey: config.groqApiKey || 'MOCK_KEY',
+    baseURL: 'https://api.groq.com/openai/v1'
+  })
+  modelName = "llama-3.3-70b-versatile"
+}
+
+// Define tools in OpenAI / Groq tool specification format
+const shoppingTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
       name: "searchProducts",
-      description: "Search the live Kapruka product catalog with search queries. Keywords can include 'tea', 'cake', 'roses', 'sweets'.",
+      description: "Search the live Kapruka product catalog. Returns real products with prices, images, and stock status. Use for queries like 'birthday cake', 'roses', 'tea gift set'.",
       parameters: {
-        type: "OBJECT",
+        type: "object",
         properties: {
-          query: { type: "STRING", description: "Catalog search keywords (e.g. 'ceylon tea', 'chocolate cake')" }
+          q: { type: "string", description: "Search keywords (min 3 chars, e.g. 'ceylon tea', 'chocolate cake')" },
+          category: { type: "string", description: "Optional category filter (e.g. 'Birthday', 'Flowers', 'Cakes')" }
         },
-        required: ["query"]
-      }
-    },
-    {
-      name: "quoteDelivery",
-      description: "Calculates shipping cost and delivery timelines for Sri Lankan shipping addresses.",
-      parameters: {
-        type: "OBJECT",
-        properties: {
-          address: { type: "STRING", description: "Street address details" },
-          city: { type: "STRING", description: "City name in Sri Lanka (e.g. 'Colombo', 'Galle', 'Kandy')" },
-          district: { type: "STRING", description: "District name in Sri Lanka (e.g. 'Colombo', 'Galle', 'Kandy')" }
-        },
-        required: ["address", "city", "district"]
-      }
-    },
-    {
-      name: "createGuestCheckout",
-      description: "Generates guest order payloads and compiles a secure guest checkout payment link (pay link).",
-      parameters: {
-        type: "OBJECT",
-        properties: {
-          items: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              properties: {
-                id: { type: "STRING", description: "Product catalog ID" },
-                quantity: { type: "NUMBER", description: "Quantity of product" },
-                giftWrap: { type: "BOOLEAN", description: "Is gift-wrapped" },
-                giftMessage: { type: "STRING", description: "Personalized greeting message" }
-              },
-              required: ["id", "quantity"]
-            }
-          },
-          recipientDetails: {
-            type: "OBJECT",
-            properties: {
-              name: { type: "STRING", description: "Recipient name" },
-              phone: { type: "STRING", description: "Recipient contact number" }
-            },
-            required: ["name", "phone"]
-          }
-        },
-        required: ["items", "recipientDetails"]
-      }
-    },
-    {
-      name: "trackOrder",
-      description: "Queries the tracking status of an existing Kapruka order using an order ID.",
-      parameters: {
-        type: "OBJECT",
-        properties: {
-          orderId: { type: "STRING", description: "The order ID starting with KAP- (e.g., KAP-123456)" }
-        },
-        required: ["orderId"]
+        required: ["q"]
       }
     }
-  ]
-}
+  },
+  {
+    type: "function",
+    function: {
+      name: "browseCategories",
+      description: "List all product categories available on Kapruka with their browse URLs. Use when the user wants to explore what's available.",
+      parameters: {
+        type: "object",
+        properties: {
+          depth: { type: "number", description: "Sub-category depth: 1 (top-level only) or 2 (with children). Default 1." }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getProduct",
+      description: "Get full details for a single Kapruka product by its product ID. Returns name, description, price, stock, images, and URL.",
+      parameters: {
+        type: "object",
+        properties: {
+          productId: { type: "string", description: "Kapruka product ID (e.g. 'cake00ka002034')" }
+        },
+        required: ["productId"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "checkDelivery",
+      description: "Check whether Kapruka can deliver to a given Sri Lankan city today, and at what rate. Returns flat LKR delivery fee.",
+      parameters: {
+        type: "object",
+        properties: {
+          city: { type: "string", description: "City name in Sri Lanka (e.g. 'Colombo 03', 'Galle', 'Kandy')" },
+          address: { type: "string", description: "Street address for the delivery" },
+          district: { type: "string", description: "District name (e.g. 'Colombo', 'Southern')" }
+        },
+        required: ["city"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "listDeliveryCities",
+      description: "Search or list Sri Lankan cities that Kapruka delivers to. Use to verify a city name before checking delivery.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Partial city name to search (e.g. 'colom', 'gal', 'kan')" }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "createOrder",
+      description: "Create a guest-checkout order on Kapruka and return a click-to-pay link. No account required. The customer opens the link to pay.",
+      parameters: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string", description: "Product ID from catalog" },
+                quantity: { type: "number", description: "Quantity (default 1, max 99)" },
+                icing_text: { type: "string", description: "Optional cake icing text" }
+              },
+              required: ["id"]
+            }
+          },
+          recipientName: { type: "string", description: "Recipient full name" },
+          recipientPhone: { type: "string", description: "Recipient contact number (e.g. +94771234567)" },
+          deliveryAddress: { type: "string", description: "Delivery street address" },
+          deliveryCity: { type: "string", description: "Delivery city (must be Kapruka-deliverable)" },
+          senderName: { type: "string", description: "Sender name" },
+          giftMessage: { type: "string", description: "Optional gift message (max 300 chars)" }
+        },
+        required: ["items", "recipientName", "recipientPhone", "deliveryAddress", "deliveryCity"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "trackOrder",
+      description: "Track an existing Kapruka order by its order number. Returns status, delivery timeline, and progress.",
+      parameters: {
+        type: "object",
+        properties: {
+          orderNumber: { type: "string", description: "Kapruka order number (e.g. 'VIMP34456CB2')" }
+        },
+        required: ["orderNumber"]
+      }
+    }
+  }
+]
 
 export const chatHandler = async (req: Request, res: Response) => {
   const { message, history, language } = req.body
@@ -85,202 +158,260 @@ export const chatHandler = async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Message is required." })
   }
 
+  // Check if API key exists for selected provider
+  if (config.aiProvider === 'huggingface' && (!config.hfToken || config.hfToken === 'MOCK_KEY')) {
+    return res.status(400).json({ error: "HF_TOKEN environment variable is not configured. Please add a valid Hugging Face Token in your .env file." })
+  }
+  if (config.aiProvider === 'openai' && (!config.openaiApiKey || config.openaiApiKey === 'YOUR_OPENAI_API_KEY_HERE' || config.openaiApiKey === 'MOCK_KEY')) {
+    return res.status(400).json({ error: "OPENAI_API_KEY environment variable is not configured. Please add a valid OpenAI API key in your .env file." })
+  }
+  if (config.aiProvider === 'groq' && (!config.groqApiKey || config.groqApiKey === 'MOCK_KEY')) {
+    return res.status(400).json({ error: "GROQ_API_KEY environment variable is not configured. Please add a valid Groq API key in your .env file." })
+  }
+
   // System prompt defining the witty, helpful Sri Lankan Kapruka shopping assistant
-  const systemPrompt = `You are a high-end, extremely helpful, warm, and witty conversational AI shopping assistant for Kapruka.
-Your personality is friendly, local, and polite (using local hospitality terms like 'Ayubowan', 'Machan' if appropriate, and wishing them a great day).
-You MUST help users find products, calculate delivery rates, wrap gifts, and checkout.
-Keep answers concise. Always intercept intents and call matching tools when appropriate.
+  const systemPrompt = `You are a high-end, extremely helpful, warm, and witty conversational AI shopping assistant for Kapruka — Sri Lanka's largest e-commerce platform.
+Your personality is friendly, local, and polite (using Sri Lankan hospitality terms like 'Ayubowan', 'Machan' if appropriate, and wishing them a great day).
+
+Tool Call Guidelines:
+- To search for products (e.g. cakes, watches, tea, flowers, toys, gifts), you MUST call "searchProducts" with singular keywords (e.g. 'watch' instead of 'watches', 'cake' instead of 'cakes'). Do not guess or fabricate product lists from your training data.
+- To check delivery city availability or shipping rates to a Sri Lankan city, call "checkDelivery".
+- To checkout or prepare a pay link for the cart, call "createOrder".
+- To track an existing order, call "trackOrder".
+
+Keep answers concise but visually rich. Present products attractively. Always show prices in LKR.
 You support four languages: English (en), Sinhala (si), Tamil (ta), and Tanglish (tanglish - blended Sinhala/English/Tamil).
 The user's current selected language is: '${language || 'en'}'. Adjust your responses to match this language mode seamlessly.`
 
-  // Check if Gemini API key exists, otherwise run simulation fallback directly
-  if (!config.geminiApiKey || config.geminiApiKey === 'MOCK_KEY') {
-    return runSimulationResponse(message, language, res)
-  }
-
   try {
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash", // standard model for fast tool calls
-      systemInstruction: systemPrompt,
-    })
+    // Format chat history for OpenAI format
+    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+      { role: 'system', content: systemPrompt },
+      ...formatHistory(history, message)
+    ]
 
-    // Format chat history for Gemini API
-    const contents = formatHistory(history, message)
+    console.log("Full Messages Array:", JSON.stringify(messages, null, 2))
+    console.log("Sending initial message to Groq Llama Agent:", message)
 
-    // Call Gemini with tools
-    let result = await model.generateContent({
-      contents,
-      tools: [shoppingTools]
-    })
-
-    let response = result.response
-    const functionCalls = response.functionCalls()
-
-    let extraData: any = {}
-
-    if (functionCalls && functionCalls.length > 0) {
-      const toolCall = functionCalls[0]
-      const name = toolCall.name
-      const args: any = toolCall.args
-
-      console.log(`Gemini called function tool: ${name} with arguments:`, args)
-
-      let functionResult: any = {}
-
-      if (name === "searchProducts") {
-        const products = await mcpService.searchProducts(args.query)
-        functionResult = { products }
-        extraData.products = products
-      } else if (name === "quoteDelivery") {
-        const quote = await mcpService.quoteDelivery(args.address, args.city, args.district)
-        functionResult = quote
-        extraData.deliveryQuote = quote
-      } else if (name === "createGuestCheckout") {
-        const checkout = await mcpService.createGuestCheckout(args.items, args.recipientDetails)
-        functionResult = checkout
-        extraData.checkoutLink = checkout.checkoutLink
-      } else if (name === "trackOrder") {
-        const status = await mcpService.trackOrder(args.orderId)
-        functionResult = status
-        extraData.orderStatus = status
+    const extractToolCalls = (message: any) => {
+      let tcList = message.tool_calls ? [...message.tool_calls] : []
+      if (tcList.length === 0 && message.content) {
+        console.log("🔍 Fallback: Checking content for XML function tags:", message.content)
+        const xmlRegex = /<function=(\w+)[>\s]*({.*?})[>\s]*<\/function>/g
+        let match
+        while ((match = xmlRegex.exec(message.content)) !== null) {
+          console.log(`🎯 Found XML tool call in content: ${match[1]} with arguments: ${match[2]}`)
+          tcList.push({
+            id: `synthetic_${Math.random().toString(36).substr(2, 9)}`,
+            type: 'function',
+            function: {
+              name: match[1],
+              arguments: match[2]
+            }
+          } as any)
+        }
+        if (tcList.length > 0) {
+          message.tool_calls = tcList
+        }
       }
-
-      // Add tool output back into history for Gemini to formulate text response
-      contents.push({ role: 'model', parts: [response.candidates![0].content.parts[0]] })
-      contents.push({
-        role: 'function',
-        parts: [{
-          functionResponse: {
-            name,
-            response: functionResult
-          }
-        }]
-      })
-
-      // Get final conversational text incorporating the tool data
-      const finalResult = await model.generateContent({ contents })
-      response = finalResult.response
+      return tcList
     }
 
-    const replyText = response.text()
+    let completion
+    let choice: any = null
+    let toolCalls: any[] = []
+    let messageObj: any = null
+
+    try {
+      completion = await openai.chat.completions.create({
+        model: modelName,
+        messages,
+        tools: shoppingTools,
+        tool_choice: "auto",
+        max_tokens: config.aiMaxTokens,
+        temperature: config.aiTemperature
+      })
+      choice = completion.choices[0]
+      messageObj = choice.message
+      toolCalls = extractToolCalls(messageObj)
+    } catch (err: any) {
+      console.warn("⚠️ Tool-calling request failed. Checking failed_generation in error...", err)
+      const failedGen = err.error?.failed_generation || err.failed_generation
+      if (failedGen) {
+        console.log("🎯 Extracted failed_generation XML from error:", failedGen)
+        messageObj = {
+          role: 'assistant',
+          content: failedGen
+        }
+        toolCalls = extractToolCalls(messageObj)
+      }
+      
+      if (toolCalls.length === 0) {
+        console.warn("⚠️ Bypassing tool calling. Attempting fallback call without tools...")
+        try {
+          require('fs').writeFileSync(
+            "C:\\Users\\MSII\\.gemini\\antigravity-ide\\brain\\6f326881-a873-41f4-9d4f-6e9edd5fa271\\groq_debug.json",
+            JSON.stringify({
+              context: "inner_tool_call_failed",
+              message: err.message,
+              status: err.status,
+              error: err.error || null,
+              failed_generation: failedGen || null,
+              stack: err.stack
+            }, null, 2)
+          )
+        } catch (fsErr) {
+          console.error("Failed to write debug log", fsErr)
+        }
+        completion = await openai.chat.completions.create({
+          model: modelName,
+          messages,
+          max_tokens: config.aiMaxTokens,
+          temperature: config.aiTemperature
+        })
+        choice = completion.choices[0]
+        messageObj = choice.message
+        toolCalls = extractToolCalls(messageObj)
+      }
+    }
+
+    let extraData: any = {}
+    let loopCount = 0
+    const maxLoops = 5
+
+    // Multi-turn tool execution loop
+    while (toolCalls && toolCalls.length > 0 && loopCount < maxLoops) {
+      loopCount++
+      // Add assistant response containing tool calls to history
+      messages.push(messageObj)
+
+      // Execute each tool call in this turn
+      for (const toolCall of toolCalls) {
+        const tc = toolCall as any
+        const name = tc.function.name
+        let args: any = {}
+        try {
+          args = JSON.parse(tc.function.arguments)
+        } catch {
+          console.warn("Failed to parse tool call arguments:", tc.function.arguments)
+        }
+
+        console.log(`[Loop ${loopCount}] Groq Llama called tool: ${name} with arguments:`, args)
+
+        let functionResult: any = {}
+
+        if (name === "searchProducts") {
+          const searchQuery = args.q || args.query || ''
+          const products = await mcpService.searchProducts(searchQuery, args.category)
+          functionResult = { products }
+          // Keep accumulating products or save latest
+          extraData.products = products
+        } else if (name === "browseCategories") {
+          const result = await mcpService.browseCategories(args.depth || 1)
+          functionResult = result
+          extraData.categories = result.categories
+        } else if (name === "getProduct") {
+          const product = await mcpService.getProduct(args.productId)
+          functionResult = product
+        } else if (name === "checkDelivery") {
+          const quote = await mcpService.quoteDelivery(args.address || '', args.city, args.district || '')
+          functionResult = quote
+          extraData.deliveryQuote = quote
+        } else if (name === "listDeliveryCities") {
+          const cities = await mcpService.listDeliveryCities(args.query)
+          functionResult = cities
+        } else if (name === "createOrder") {
+          const checkout = await mcpService.createGuestCheckout(
+            args.items,
+            { name: args.recipientName, phone: args.recipientPhone },
+            { address: args.deliveryAddress, city: args.deliveryCity },
+            { name: args.senderName || args.recipientName },
+            args.giftMessage
+          )
+          functionResult = checkout
+          extraData.checkoutLink = checkout.checkoutLink
+        } else if (name === "trackOrder") {
+          const status = await mcpService.trackOrder(args.orderNumber)
+          functionResult = status
+          extraData.orderStatus = status
+        }
+
+        // Add function response to messages list
+        messages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: JSON.stringify(functionResult)
+        })
+      }
+
+      // Query API again with tool outputs loaded (wrapped in safety try/catch)
+      try {
+        completion = await openai.chat.completions.create({
+          model: modelName,
+          messages,
+          tools: shoppingTools,
+          max_tokens: config.aiMaxTokens,
+          temperature: config.aiTemperature
+        })
+      } catch (err: any) {
+        console.warn("⚠️ Secondary tool-calling request failed. Attempting fallback call without tools...", err)
+        completion = await openai.chat.completions.create({
+          model: modelName,
+          messages,
+          max_tokens: config.aiMaxTokens,
+          temperature: config.aiTemperature
+        })
+      }
+
+      choice = completion.choices[0]
+      messageObj = choice.message
+      toolCalls = extractToolCalls(messageObj)
+    }
+
+    const replyText = messageObj.content || ""
+    console.log("Extracted Groq Llama reply text:", replyText)
+
     return res.json({
       reply: replyText,
       ...extraData
     })
 
-  } catch (error) {
-    console.error("Error calling Gemini API, falling back to simulated engine:", error)
-    return runSimulationResponse(message, language, res)
+  } catch (error: any) {
+    console.error("Error executing Chat Agent:", error)
+    try {
+      require('fs').writeFileSync(
+        "C:\\Users\\MSII\\.gemini\\antigravity-ide\\brain\\6f326881-a873-41f4-9d4f-6e9edd5fa271\\groq_debug.json",
+        JSON.stringify({
+          message: error.message,
+          status: error.status,
+          error: error.error || null,
+          failed_generation: error.error?.failed_generation || null,
+          stack: error.stack
+        }, null, 2)
+      )
+    } catch (fsErr) {
+      console.error("Failed to write debug log", fsErr)
+    }
+    return res.status(500).json({ error: error.message || "An unexpected error occurred in the Groq AI engine." })
   }
 }
 
-// Format history to match Gemini's structure
-function formatHistory(history: any[], currentMsg: string): any[] {
-  const formatted: any[] = []
+// Format history array to match OpenAI Chat format
+function formatHistory(history: any[], currentMsg: string): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+  const formatted: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = []
   if (history && Array.isArray(history)) {
     history.forEach(h => {
       formatted.push({
-        role: h.role === 'user' ? 'user' : 'model',
-        parts: [{ text: h.content }]
+        role: h.role === 'user' ? 'user' : 'assistant',
+        content: h.content
       })
     })
   }
   formatted.push({
     role: 'user',
-    parts: [{ text: currentMsg }]
+    content: currentMsg
   })
   return formatted
 }
 
-// Fallback Simulation response if Gemini API key is missing or calls fail
-function runSimulationResponse(message: string, language: string, res: Response) {
-  const query = message.toLowerCase()
-  let reply = ""
-  let products: any[] | undefined = undefined
-  let deliveryQuote: any = undefined
-  let checkoutLink: string | undefined = undefined
-  let orderStatus: any = undefined
-
-  const matchesSearch = query.includes("search") || query.includes("find") || query.includes("සොයන්න") || query.includes("തേடு") || query.includes("cake") || query.includes("tea") || query.includes("rose") || query.includes("sweet") || query.includes("chocolate")
-  const matchesDelivery = query.includes("delivery") || query.includes("charge") || query.includes("galle") || query.includes("colombo") || query.includes("kandy") || query.includes("ඩිලිවරි") || query.includes("ගාස්තු") || query.includes("விநியோகம்")
-  const matchesCheckout = query.includes("checkout") || query.includes("pay") || query.includes("buy") || query.includes("ගෙවන්න") || query.includes("මිලදී") || query.includes("கட்டணம்")
-
-  if (matchesSearch) {
-    // Filter sample products
-    products = [
-      {
-        id: "p1",
-        title: "Premium Ceylon Black Tea Gift Set",
-        price: 3850,
-        imageUrl: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500&auto=format&fit=crop&q=80",
-        description: "Finest quality single-origin Ceylon tea in a hand-crafted wooden presentation box.",
-        availability: true
-      },
-      {
-        id: "p2",
-        title: "Deluxe Chocolate Fudge Cake (1kg)",
-        price: 4500,
-        imageUrl: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=500&auto=format&fit=crop&q=80",
-        description: "Rich, moist layers of chocolate sponge smothered in premium dark chocolate icing.",
-        availability: true
-      }
-    ]
-    if (language === 'si') {
-      reply = "මම ඔබේ සෙවුමට ගැලපෙන කප්රුක භාණ්ඩ සොයා ගත්තා. ඔබට අවශ්‍ය දේ තෝරා කරත්තයට එක් කර ගන්න."
-    } else if (language === 'tanglish') {
-      reply = "මම ඔයාට ගැලපෙන products කිහිපයක් සෙට් කලා. මෙතනින් කැමති එකක් select කරලා Cart එකට Add කරගන්න!"
-    } else {
-      reply = "I found these live products in the Kapruka catalog for you. You can easily add them to your cart below."
-    }
-  } else if (matchesDelivery) {
-    let city = "Colombo"
-    let charge = 300
-    if (query.includes("galle")) {
-      city = "Galle"
-      charge = 650
-    } else if (query.includes("kandy")) {
-      city = "Kandy"
-      charge = 550
-    }
-    deliveryQuote = {
-      charge,
-      timeline: "Delivered within 24-48 hours",
-      address: `No. 45, Main Road, ${city}`,
-      city,
-      district: city
-    }
-    if (language === 'si') {
-      reply = `${city} සඳහා බෙදා හැරීමේ ගාස්තුව රු. ${charge} වේ. සාමාන්‍යයෙන් පැය 24-48 අතර කාලයකදී ඇණවුම නිවසටම ලැබෙනු ඇත.`
-    } else if (language === 'tanglish') {
-      reply = `${city} වලට delivery charge එක Rs. ${charge} ක් වෙනවා, Machan. 24-48 hours යයි delivery වෙන්න.`
-    } else {
-      reply = `The estimated delivery fee to ${city} is Rs. ${charge}. Delivery timeline is 24-48 hours.`
-    }
-  } else if (matchesCheckout) {
-    const orderId = `KAP-${Math.floor(100000 + Math.random() * 900000)}`
-    checkoutLink = `https://www.kapruka.com/checkout/payment-simulate?order=${orderId}&amount=4850`
-    if (language === 'si') {
-      reply = "විශිෂ්ටයි! ඔබේ ඇණවුම සූදානම්. පහත ඇති සබැඳියෙන් ආරක්ෂිතව ගෙවීම් අවසන් කරන්න."
-    } else if (language === 'tanglish') {
-      reply = "Awesome! ඔයාගේ order එක ready. පහල තියෙන [Proceed to Secure Payment] button එකෙන් payment එක complete කරන්න."
-    } else {
-      reply = "Great! Your order has been compiled. Click on the button below to proceed to Kapru's secure payment gateway."
-    }
-  } else {
-    if (language === 'si') {
-      reply = "මම කප්රුක සාප්පු සහායකයා. මට පුළුවන් භාණ්ඩ සොයන්න, ඩිලිවරි ගාස්තු ගණනය කරන්න, සහ ආරක්ෂිතව ගෙවීම් කරන්න."
-    } else if (language === 'tanglish') {
-      reply = "Ayubowan! මම ඔයාගේ Kapruka Shopping Companion. මට පුළුවන් products search කරන්න, delivery quotes ගන්න, සහ cart එක handle කරන්න."
-    } else {
-      reply = "I understand! As your Kapruka Shopping Companion, I can help you search the catalog, estimate exact delivery charges, and checkout safely."
-    }
-  }
-
-  return res.json({
-    reply,
-    products,
-    deliveryQuote,
-    checkoutLink,
-    orderStatus
-  })
-}
+// Trigger nodemon file watcher restart 6

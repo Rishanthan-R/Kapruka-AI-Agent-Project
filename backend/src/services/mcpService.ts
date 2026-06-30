@@ -1,6 +1,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { config } from '../config/env'
+import fs from 'fs'
 
 export interface Product {
   id: string
@@ -11,53 +13,41 @@ export interface Product {
   availability: boolean
 }
 
-// Fallback catalog database in case of connection timeouts
-const fallbackCatalog: Product[] = [
-  {
-    id: "p1",
-    title: "Premium Ceylon Black Tea Gift Set",
-    price: 3850,
-    imageUrl: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500&auto=format&fit=crop&q=80",
-    description: "Finest quality single-origin Ceylon tea in a hand-crafted wooden presentation box.",
-    availability: true
-  },
-  {
-    id: "p2",
-    title: "Deluxe Chocolate Fudge Cake (1kg)",
-    price: 4500,
-    imageUrl: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=500&auto=format&fit=crop&q=80",
-    description: "Rich, moist layers of chocolate sponge smothered in premium dark chocolate icing.",
-    availability: true
-  },
-  {
-    id: "p3",
-    title: "Fresh Red Roses Bouquet - 12 Stems",
-    price: 2950,
-    imageUrl: "https://images.unsplash.com/photo-1561181286-d3fee7d55364?w=500&auto=format&fit=crop&q=80",
-    description: "A gorgeous arrangement of freshly-cut local Sri Lankan red roses, wrapped beautifully.",
-    availability: true
-  },
-  {
-    id: "p4",
-    title: "Dilmah Earl Grey Organic Selection",
-    price: 1890,
-    imageUrl: "https://images.unsplash.com/photo-1597481499750-3e6b22637e12?w=500&auto=format&fit=crop&q=80",
-    description: "25 envelope tea bags of aromatic organic Earl Grey with natural bergamot oil.",
-    availability: true
-  },
-  {
-    id: "p5",
-    title: "Traditional Sri Lankan Sweet Hamper",
-    price: 5200,
-    imageUrl: "https://images.unsplash.com/photo-1581781870027-04212e231e96?w=500&auto=format&fit=crop&q=80",
-    description: "A delightful assortment of Kavum, Kokis, Aluwa, and Dodol for festive celebrations.",
-    availability: true
+/**
+ * Helper to extract text content from an MCP tool response.
+ * The response shape is { content: [{ text: string }] }.
+ * Returns the parsed JSON, or null if parsing fails.
+ */
+function extractToolResponse(response: unknown, toolName: string): any | null {
+  const resAny = response as any
+  try {
+    require('fs').writeFileSync(
+      `C:\\Users\\MSII\\.gemini\\antigravity-ide\\brain\\6f326881-a873-41f4-9d4f-6e9edd5fa271\\mcp_debug_${toolName}.json`,
+      JSON.stringify({ rawResponse: response }, null, 2)
+    )
+  } catch (err) {
+    console.error("Failed to write MCP debug log", err)
   }
-]
+
+  if (resAny && resAny.content && Array.isArray(resAny.content)) {
+    for (const part of resAny.content) {
+      if (part.text && typeof part.text === 'string') {
+        try {
+          return JSON.parse(part.text)
+        } catch {
+          // If it's not JSON, return the raw text
+          return part.text
+        }
+      }
+    }
+  }
+  return null
+}
 
 export class McpService {
   private static instance: McpService
   private client: Client | null = null
+  private transport: StreamableHTTPClientTransport | SSEClientTransport | null = null
   private connected: boolean = false
 
   private constructor() {}
@@ -69,13 +59,23 @@ export class McpService {
     return McpService.instance
   }
 
+  /**
+   * Connect to the live Kapruka MCP server.
+   * Tries Streamable HTTP first (preferred), falls back to SSE.
+   */
   public async connect(): Promise<boolean> {
     if (this.connected && this.client) return true
 
+    const endpoint = config.kaprukaMcpEndpoint || 'https://mcp.kapruka.com/mcp'
+
+    let lastStreamableError: any = null
+
+    // Try Streamable HTTP transport first (the Kapruka server supports this)
     try {
-      console.log(`Connecting to Kapruka MCP at: ${config.kaprukaMcpEndpoint}`)
-      
-      const transport = new SSEClientTransport(new URL(config.kaprukaMcpEndpoint))
+      console.log(`Connecting to Kapruka MCP via Streamable HTTP: ${endpoint}`)
+
+      this.transport = new StreamableHTTPClientTransport(new URL(endpoint))
+
       const mcpClient = new Client(
         {
           name: "kapruka-companion-backend",
@@ -86,140 +86,404 @@ export class McpService {
         }
       )
 
-      await mcpClient.connect(transport)
+      await mcpClient.connect(this.transport)
       this.client = mcpClient
       this.connected = true
-      console.log("Kapruka MCP Server connected successfully via SSE!")
+      console.log("✅ Kapruka MCP Server connected successfully via Streamable HTTP!")
+
+      // List available tools for verification
+      try {
+        const toolsList = await mcpClient.listTools()
+        const toolNames = toolsList.tools.map((t: any) => t.name)
+        console.log("Available Kapruka MCP Tools:", toolNames.join(", "))
+      } catch (err) {
+        console.warn("Could not list MCP tools (non-fatal):", err)
+      }
+
       return true
-    } catch (error) {
-      console.warn("Failed to connect to remote Kapruka MCP. Falling back to local mock service:", error)
+    } catch (streamableError) {
+      lastStreamableError = streamableError
+      console.warn("Streamable HTTP failed, trying SSE fallback...", streamableError)
+    }
+
+    // Fallback to SSE transport
+    try {
+      console.log(`Connecting to Kapruka MCP via SSE fallback: ${endpoint}`)
+
+      this.transport = new SSEClientTransport(new URL(endpoint))
+
+      const mcpClient = new Client(
+        {
+          name: "kapruka-companion-backend",
+          version: "1.0.0"
+        },
+        {
+          capabilities: {}
+        }
+      )
+
+      await mcpClient.connect(this.transport)
+      this.client = mcpClient
+      this.connected = true
+      console.log("✅ Kapruka MCP Server connected successfully via SSE!")
+
+      try {
+        const toolsList = await mcpClient.listTools()
+        const toolNames = toolsList.tools.map((t: any) => t.name)
+        console.log("Available Kapruka MCP Tools:", toolNames.join(", "))
+      } catch (err) {
+        console.warn("Could not list MCP tools (non-fatal):", err)
+      }
+
+      return true
+    } catch (sseError) {
       this.connected = false
-      return false
+      console.error("Failed to connect to Kapruka MCP via both transports.")
+      console.error("Streamable HTTP error:", lastStreamableError)
+      console.error("SSE error:", sseError)
+      throw sseError
     }
   }
 
-  public async searchProducts(query: string): Promise<Product[]> {
-    const isConnected = await this.connect()
+  /**
+   * Search live Kapruka product catalog.
+   * Remote tool: kapruka_search_products
+   * Input: { q, category?, limit?, currency?, in_stock_only?, sort?, response_format }
+   * Output: { results: [...], next_cursor, applied_filters }
+   */
+  public async searchProducts(query: string, category?: string): Promise<Product[]> {
+    await this.connect()
+
+    if (!this.client) {
+      throw new Error("Kapruka MCP client is not connected.")
+    }
+
+    try {
+      const response = await this.client.callTool({
+        name: "kapruka_search_products",
+        arguments: {
+          params: {
+            q: query,
+            ...(category ? { category } : {}),
+            limit: 10,
+            in_stock_only: true,
+            response_format: "json"
+          }
+        }
+      })
+
+      fs.writeFileSync(
+        "C:\\Users\\MSII\\.gemini\\antigravity-ide\\brain\\6f326881-a873-41f4-9d4f-6e9edd5fa271\\mcp_debug_calls.json",
+        JSON.stringify({ method: "searchProducts", query, response }, null, 2)
+      )
+
+      const data = extractToolResponse(response, "kapruka_search_products")
+      if (data && data.results && Array.isArray(data.results)) {
+        return data.results.map((item: any) => ({
+          id: item.id,
+          title: item.name,
+          price: item.price?.amount || 0,
+          imageUrl: item.image_url || "",
+          description: item.summary || "",
+          availability: item.in_stock !== false
+        }))
+      }
+    } catch (err: any) {
+      fs.writeFileSync(
+        "C:\\Users\\MSII\\.gemini\\antigravity-ide\\brain\\6f326881-a873-41f4-9d4f-6e9edd5fa271\\mcp_debug_calls.json",
+        JSON.stringify({ method: "searchProducts", query, error: err.message || err }, null, 2)
+      )
+      throw err
+    }
     
-    if (isConnected && this.client) {
-      try {
-        const response = await this.client.callTool({
-          name: "search_products",
-          arguments: { query }
-        })
-        
-        // Parse results from tool output structure
-        const resAny = response as any
-        if (resAny && resAny.content && resAny.content[0]) {
-          const text = resAny.content[0].text
-          if (typeof text === 'string') {
-            return JSON.parse(text) as Product[]
-          }
-        }
-      } catch (err) {
-        console.error("Error calling search_products MCP tool, using fallback:", err)
-      }
-    }
-
-    // Fallback simulation
-    const lowerQuery = query.toLowerCase()
-    return fallbackCatalog.filter(p => 
-      p.title.toLowerCase().includes(lowerQuery) || 
-      p.description?.toLowerCase().includes(lowerQuery)
-    )
+    return []
   }
 
-  public async quoteDelivery(address: string, city: string, district: string): Promise<any> {
-    const isConnected = await this.connect()
+  /**
+   * Get full details for a single product.
+   * Remote tool: kapruka_get_product
+   * Input: { product_id, currency?, response_format }
+   */
+  public async getProduct(productId: string): Promise<any> {
+    await this.connect()
 
-    if (isConnected && this.client) {
-      try {
-        const response = await this.client.callTool({
-          name: "quote_delivery",
-          arguments: { address, city, district }
-        })
-        const resAny = response as any
-        if (resAny && resAny.content && resAny.content[0]) {
-          const text = resAny.content[0].text
-          if (typeof text === 'string') {
-            return JSON.parse(text)
-          }
-        }
-      } catch (err) {
-        console.error("Error calling quote_delivery MCP tool, using fallback:", err)
-      }
+    if (!this.client) {
+      throw new Error("Kapruka MCP client is not connected.")
     }
 
-    // Fallback rate calculation
-    let charge = 450
-    const lowerCity = city.toLowerCase()
-    if (lowerCity.includes("galle")) charge = 650
-    if (lowerCity.includes("kandy")) charge = 550
-    if (lowerCity.includes("colombo")) charge = 300
+    const response = await this.client.callTool({
+      name: "kapruka_get_product",
+      arguments: {
+        params: {
+          product_id: productId,
+          response_format: "json"
+        }
+      }
+    })
+    
+    return extractToolResponse(response, "kapruka_get_product")
+  }
 
+  /**
+   * Check delivery feasibility and rate for a Sri Lankan city.
+   * Remote tool: kapruka_check_delivery
+   * Input: { city, delivery_date?, product_id?, response_format }
+   * Output: { city, available, rate, currency, checked_date, reason?, next_available_date?, perishable_warning? }
+   */
+  public async quoteDelivery(address: string, city: string, district: string): Promise<any> {
+    await this.connect()
+
+    if (!this.client) {
+      throw new Error("Kapruka MCP client is not connected.")
+    }
+
+    try {
+      const response = await this.client.callTool({
+        name: "kapruka_check_delivery",
+        arguments: {
+          params: {
+            city,
+            response_format: "json"
+          }
+        }
+      })
+
+      fs.writeFileSync(
+        "C:\\Users\\MSII\\.gemini\\antigravity-ide\\brain\\6f326881-a873-41f4-9d4f-6e9edd5fa271\\mcp_debug_calls.json",
+        JSON.stringify({ method: "quoteDelivery", city, response }, null, 2)
+      )
+
+      const data = extractToolResponse(response, "kapruka_check_delivery")
+      if (data && typeof data === 'object') {
+        return {
+          charge: data.rate || 0,
+          timeline: data.available
+            ? `Delivery available on ${data.checked_date}`
+            : `Not available: ${data.reason || 'Unknown'}. Next: ${data.next_available_date || 'N/A'}`,
+          address,
+          city: data.city || city,
+          district,
+          available: data.available,
+          perishable_warning: data.perishable_warning || null
+        }
+      }
+
+      if (data && typeof data === 'string') {
+        return {
+          charge: 0,
+          timeline: data,
+          address,
+          city,
+          district,
+          available: false,
+          perishable_warning: null
+        }
+      }
+    } catch (err: any) {
+      fs.writeFileSync(
+        "C:\\Users\\MSII\\.gemini\\antigravity-ide\\brain\\6f326881-a873-41f4-9d4f-6e9edd5fa271\\mcp_debug_calls.json",
+        JSON.stringify({ method: "quoteDelivery", city, error: err.message || err }, null, 2)
+      )
+      throw err
+    }
+    
     return {
-      charge,
-      timeline: "Expected delivery within 24-48 hours",
+      charge: 0,
+      timeline: "Failed to retrieve delivery quote from Kapruka MCP.",
       address,
       city,
-      district
+      district,
+      available: false,
+      perishable_warning: null
     }
   }
 
-  public async createGuestCheckout(items: any[], recipientDetails: any): Promise<any> {
-    const isConnected = await this.connect()
+  /**
+   * List cities Kapruka delivers to, with optional search filter.
+   * Remote tool: kapruka_list_delivery_cities
+   * Input: { query?, limit?, response_format }
+   * Output: { cities: [{name, aliases}], total_matched, showing }
+   */
+  public async listDeliveryCities(query?: string): Promise<any> {
+    await this.connect()
 
-    if (isConnected && this.client) {
-      try {
-        const response = await this.client.callTool({
-          name: "create_guest_checkout",
-          arguments: { items, recipientDetails }
-        })
-        const resAny = response as any
-        if (resAny && resAny.content && resAny.content[0]) {
-          const text = resAny.content[0].text
-          if (typeof text === 'string') {
-            return JSON.parse(text)
-          }
+    if (!this.client) {
+      throw new Error("Kapruka MCP client is not connected.")
+    }
+
+    const response = await this.client.callTool({
+      name: "kapruka_list_delivery_cities",
+      arguments: {
+        params: {
+          ...(query ? { query } : {}),
+          limit: 25,
+          response_format: "json"
         }
-      } catch (err) {
-        console.error("Error calling create_guest_checkout MCP tool, using fallback:", err)
       }
-    }
-
-    // Fallback checkout pay link simulator
-    const orderId = `KAP-${Math.floor(100000 + Math.random() * 900000)}`
-    return {
-      orderId,
-      checkoutLink: `https://www.kapruka.com/checkout/payment-simulate?order=${orderId}&recipient=${encodeURIComponent(recipientDetails.name || 'Guest')}`
-    }
+    })
+    
+    return extractToolResponse(response, "kapruka_list_delivery_cities")
   }
 
-  public async trackOrder(orderId: string): Promise<any> {
-    const isConnected = await this.connect()
+  /**
+   * Create a guest-checkout order and get a click-to-pay link.
+   * Remote tool: kapruka_create_order
+   * Input: { cart, recipient, delivery, sender, gift_message?, currency?, response_format }
+   * Output: { checkout_url, order_ref, summary: { items_total, delivery_fee, addons_total, grand_total, currency }, expires_at }
+   */
+  public async createGuestCheckout(items: any[], recipientDetails: any, deliveryDetails?: any, senderDetails?: any, giftMessage?: string): Promise<any> {
+    await this.connect()
 
-    if (isConnected && this.client) {
-      try {
-        const response = await this.client.callTool({
-          name: "track_order",
-          arguments: { orderId }
-        })
-        const resAny = response as any
-        if (resAny && resAny.content && resAny.content[0]) {
-          const text = resAny.content[0].text
-          if (typeof text === 'string') {
-            return JSON.parse(text)
-          }
-        }
-      } catch (err) {
-        console.error("Error calling track_order MCP tool, using fallback:", err)
-      }
+    if (!this.client) {
+      throw new Error("Kapruka MCP client is not connected.")
     }
 
-    return {
-      orderId,
-      status: "SHIPPED",
-      deliveryDate: "Expected delivery tomorrow evening"
+    // Map internal cart items to Kapruka's expected format
+    const cart = items.map((item: any) => ({
+      product_id: item.id || item.product_id,
+      quantity: item.quantity || 1,
+      ...(item.icing_text ? { icing_text: item.icing_text } : {})
+    }))
+
+    const recipient = {
+      name: recipientDetails.name || "Guest",
+      phone: recipientDetails.phone || recipientDetails.recipientPhone || "+94771234567"
+    }
+
+    // Build today's date in YYYY-MM-DD for delivery
+    const today = new Date()
+    const deliveryDate = deliveryDetails?.date || today.toISOString().split('T')[0]
+
+    const delivery = {
+      address: deliveryDetails?.address || "No. 1, Main Street",
+      city: deliveryDetails?.city || "Colombo",
+      location_type: deliveryDetails?.location_type || "house",
+      date: deliveryDate,
+      ...(deliveryDetails?.instructions ? { instructions: deliveryDetails.instructions } : {})
+    }
+
+    const sender = {
+      name: senderDetails?.name || recipientDetails.name || "Anonymous",
+      anonymous: senderDetails?.anonymous || false
+    }
+
+    const response = await this.client.callTool({
+      name: "kapruka_create_order",
+      arguments: {
+        params: {
+          cart,
+          recipient,
+          delivery,
+          sender,
+          ...(giftMessage ? { gift_message: giftMessage } : {}),
+          currency: "LKR",
+          response_format: "json"
+        }
+      }
+    })
+
+    const data = extractToolResponse(response, "kapruka_create_order")
+    if (data && typeof data === 'object') {
+      return {
+        orderId: data.order_ref || "N/A",
+        checkoutLink: data.checkout_url || "",
+        summary: data.summary || null,
+        expiresAt: data.expires_at || null
+      }
+    }
+    
+    throw new Error("Failed to compile checkout link from Kapruka MCP.")
+  }
+
+  /**
+   * Track an existing Kapruka order by order number.
+   * Remote tool: kapruka_track_order
+   * Input: { order_number, response_format }
+   * Output: { order_number, status, status_display, recipient, progress, items, ... }
+   */
+  public async trackOrder(orderNumber: string): Promise<any> {
+    await this.connect()
+
+    if (!this.client) {
+      throw new Error("Kapruka MCP client is not connected.")
+    }
+
+    const response = await this.client.callTool({
+      name: "kapruka_track_order",
+      arguments: {
+        params: {
+          order_number: orderNumber,
+          response_format: "json"
+        }
+      }
+    })
+
+    const data = extractToolResponse(response, "kapruka_track_order")
+    if (data && typeof data === 'object') {
+      return {
+        orderId: data.order_number,
+        status: data.status_display || data.status,
+        deliveryDate: data.delivery_date || "Pending",
+        recipient: data.recipient,
+        progress: data.progress,
+        items: data.items,
+        hasDeliveryPhoto: data.has_delivery_photo,
+        hasDeliveryVideo: data.has_delivery_video
+      }
+    }
+    
+    throw new Error(`Failed to retrieve tracking status for order ${orderNumber} from Kapruka MCP.`)
+  }
+
+  /**
+   * List product categories on Kapruka.
+   * Remote tool: kapruka_list_categories
+   * Input: { depth?, response_format }
+   * Output: { categories: [{ name, url, children }] }
+   */
+  public async browseCategories(depth: number = 1): Promise<any> {
+    await this.connect()
+
+    if (!this.client) {
+      throw new Error("Kapruka MCP client is not connected.")
+    }
+
+    const response = await this.client.callTool({
+      name: "kapruka_list_categories",
+      arguments: {
+        params: {
+          depth,
+          response_format: "json"
+        }
+      }
+    })
+
+    const data = extractToolResponse(response, "kapruka_list_categories")
+    if (data && data.categories) {
+      return {
+        categories: data.categories.map((cat: any) => ({
+          name: cat.name,
+          url: cat.url,
+          children: cat.children || []
+        }))
+      }
+    }
+    
+    return { categories: [] }
+  }
+
+  /**
+   * Gracefully disconnect from the MCP server.
+   */
+  public async disconnect(): Promise<void> {
+    if (this.client) {
+      try {
+        await this.client.close()
+      } catch (err) {
+        console.warn("Error closing MCP client:", err)
+      }
+      this.client = null
+      this.connected = false
     }
   }
 }

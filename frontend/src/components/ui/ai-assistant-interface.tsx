@@ -24,6 +24,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore, translations } from "../../store/useStore";
 import type { Language } from "../../store/useStore";
+import brandLogo from "../../assets/kapruka_ai_agent_logo.png";
 
 export function AIAssistantInterface() {
   const {
@@ -178,12 +179,12 @@ export function AIAssistantInterface() {
           </mask>
           <g mask="url(#cs_mask_1_ellipse-12)">
             <path fill="#fff" d="M200 0H0v200h200V0z"></path>
-            <path fill="#0066FF" fillOpacity="0.33" d="M200 0H0v200h200V0z"></path>
+            <path fill="#4f2282" fillOpacity="0.33" d="M200 0H0v200h200V0z"></path>
             <g filter="url(#filter0_f_844_2811)" className="animate-gradient">
-              <path fill="#0066FF" d="M110 32H18v68h92V32z"></path>
-              <path fill="#0044FF" d="M188-24H15v98h173v-98z"></path>
-              <path fill="#0099FF" d="M175 70H5v156h170V70z"></path>
-              <path fill="#00CCFF" d="M230 51H100v103h130V51z"></path>
+              <path fill="#4f2282" d="M110 32H18v68h92V32z"></path>
+              <path fill="#2f144f" d="M188-24H15v98h173v-98z"></path>
+              <path fill="#6d35ab" d="M175 70H5v156h170V70z"></path>
+              <path fill="#ffd500" d="M230 51H100v103h130V51z"></path>
             </g>
           </g>
         </g>
@@ -241,29 +242,23 @@ export function AIAssistantInterface() {
       <div className="flex-1 flex flex-col h-full bg-white relative overflow-hidden">
         
         {/* Navigation / Header */}
-        <header className="h-16 border-b border-gray-100 px-6 flex items-center justify-between bg-white/80 backdrop-blur-md z-10 shrink-0">
+        <header className="h-16 border-b border-brand-purple-light/10 px-6 flex items-center justify-between bg-brand-purple text-white z-10 shrink-0 shadow-md">
           <div className="flex items-center gap-3">
-            {renderLogo("w-8 h-8")}
-            <div>
-              <h1 className="text-sm font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-400">
-                Kapruka AI
-              </h1>
-              <p className="text-[10px] text-gray-400 font-medium">Sri Lankan Shopping Companion</p>
-            </div>
+            <img src={brandLogo} className="h-11 w-auto object-contain rounded" alt="Kapruka AI Shopping Agent" />
           </div>
 
           {/* Localization Pill & Cart Trigger */}
           <div className="flex items-center gap-3">
-            <div className="bg-gray-100/80 p-0.5 rounded-full flex items-center border border-gray-200/50">
-              <Globe className="w-3.5 h-3.5 text-blue-500 ml-2" />
+            <div className="bg-white/10 p-0.5 rounded-full flex items-center border border-white/10">
+              <Globe className="w-3.5 h-3.5 text-brand-yellow ml-2" />
               {(["en", "si", "ta", "tanglish"] as Language[]).map((lang) => (
                 <button
                   key={lang}
                   onClick={() => setLanguage(lang)}
                   className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase transition-all ${
                     language === lang
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-gray-500 hover:text-gray-800"
+                      ? "bg-brand-yellow text-brand-purple shadow-sm"
+                      : "text-purple-200 hover:text-white"
                   }`}
                 >
                   {lang === "tanglish" ? "Tang" : lang}
@@ -273,7 +268,7 @@ export function AIAssistantInterface() {
 
             <button
               onClick={clearChat}
-              className="text-xs px-2.5 py-1 rounded-md border border-gray-200 hover:bg-gray-50 transition-all text-gray-600"
+              className="text-xs px-2.5 py-1 rounded-md border border-white/20 hover:bg-white/10 transition-all text-white font-bold"
             >
               Clear
             </button>
@@ -281,12 +276,12 @@ export function AIAssistantInterface() {
             <button
               onClick={() => setIsCartOpen(!isCartOpen)}
               className={`relative p-2 rounded-full border transition-all ${
-                isCartOpen ? "bg-blue-50 border-blue-200 text-blue-600" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                isCartOpen ? "bg-brand-yellow border-brand-yellow text-brand-purple" : "bg-white/10 border-white/20 text-purple-200 hover:bg-white/20 hover:text-white"
               }`}
             >
               <ShoppingCart className="w-4 h-4" />
               {cart.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+                <span className="absolute -top-1 -right-1 bg-brand-yellow text-brand-purple font-black text-[9px] w-4.5 h-4.5 rounded-full flex items-center justify-center border border-brand-purple/15 shadow-sm animate-pulse">
                   {cart.reduce((sum, item) => sum + item.quantity, 0)}
                 </span>
               )}
@@ -302,7 +297,7 @@ export function AIAssistantInterface() {
               
               {/* Logo */}
               <div className="mb-6">
-                {renderLogo("w-20 h-20")}
+                <img src={brandLogo} className="h-16 w-auto object-contain rounded-xl shadow-md border border-brand-purple-light/10" alt="Kapruka AI Shopping Agent" />
               </div>
 
               {/* Welcome text */}
@@ -313,7 +308,7 @@ export function AIAssistantInterface() {
                   transition={{ duration: 0.3 }}
                   className="flex flex-col items-center"
                 >
-                  <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-400 mb-2">
+                  <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-brand-purple to-brand-purple-light mb-2">
                     {t.welcome}
                   </h1>
                   <p className="text-sm text-gray-400 max-w-md">
@@ -384,7 +379,7 @@ export function AIAssistantInterface() {
                       <div
                         className={`max-w-[85%] rounded-2xl p-4 shadow-sm flex flex-col gap-2 ${
                           message.role === "user"
-                            ? "bg-blue-600 text-white rounded-tr-none"
+                            ? "bg-brand-purple text-white rounded-tr-none"
                             : "bg-gray-50 border border-gray-100 text-gray-800 rounded-tl-none"
                         }`}
                       >
@@ -399,7 +394,7 @@ export function AIAssistantInterface() {
                             {message.products.map((product) => (
                               <div
                                 key={product.id}
-                                className="min-w-[220px] max-w-[220px] rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col justify-between shadow-sm hover:border-blue-400 transition-all duration-300 group"
+                                className="min-w-[220px] max-w-[220px] rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col justify-between shadow-sm hover:border-brand-purple/40 transition-all duration-300 group"
                               >
                                 <div className="relative h-28 w-full overflow-hidden bg-gray-50">
                                   <img
@@ -414,7 +409,7 @@ export function AIAssistantInterface() {
                                 </div>
                                 <div className="p-3 flex-1 flex flex-col justify-between gap-2">
                                   <div>
-                                    <h4 className="text-xs font-bold line-clamp-1 text-gray-800 group-hover:text-blue-600 transition-colors">
+                                    <h4 className="text-xs font-bold line-clamp-1 text-gray-800 group-hover:text-brand-purple transition-colors">
                                       {product.title}
                                     </h4>
                                     <p className="text-[9px] text-gray-400 line-clamp-2 mt-1">
@@ -422,12 +417,12 @@ export function AIAssistantInterface() {
                                     </p>
                                   </div>
                                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-                                    <span className="text-xs font-black text-blue-600">
+                                    <span className="text-xs font-black text-brand-purple">
                                       Rs. {product.price.toLocaleString()}
                                     </span>
                                     <button
                                       onClick={() => addToCart(product)}
-                                      className="px-2.5 py-1 text-[9px] font-bold bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-all active:scale-95 flex items-center gap-1"
+                                      className="px-2.5 py-1 text-[9px] font-bold bg-brand-purple text-white rounded-md hover:bg-brand-purple-light transition-all active:scale-95 flex items-center gap-1"
                                     >
                                       <ShoppingCart className="w-2.5 h-2.5" />
                                       Add
@@ -468,7 +463,7 @@ export function AIAssistantInterface() {
                               href={message.checkoutLink}
                               target="_blank"
                               rel="noreferrer"
-                              className="py-2 px-3 bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 text-white text-xs font-bold rounded-lg shadow-sm hover:brightness-105 active:scale-98 transition-all flex items-center gap-2"
+                              className="py-2 px-3 bg-gradient-to-r from-brand-purple via-brand-purple-light to-brand-purple text-white text-xs font-bold rounded-lg shadow-sm hover:brightness-105 active:scale-98 transition-all flex items-center gap-2"
                             >
                               <CreditCard className="w-3.5 h-3.5" />
                               {t.checkoutBtn}
@@ -476,7 +471,7 @@ export function AIAssistantInterface() {
                           </div>
                         )}
 
-                        <span className={`text-[8px] mt-1 text-right ${message.role === "user" ? "text-blue-200" : "text-gray-400"}`}>
+                        <span className={`text-[8px] mt-1 text-right ${message.role === "user" ? "text-purple-200" : "text-gray-400"}`}>
                           {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
@@ -524,7 +519,7 @@ export function AIAssistantInterface() {
                       onClick={() => setActiveCommandCategory(activeCommandCategory === cat ? null : cat)}
                       className={`px-3 py-1 rounded-full border text-[11px] font-bold flex items-center gap-1.5 transition-all ${
                         activeCommandCategory === cat
-                          ? "bg-blue-50 border-blue-200 text-blue-600"
+                          ? "bg-brand-purple/10 border-brand-purple/20 text-brand-purple"
                           : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
                       }`}
                     >
@@ -556,9 +551,9 @@ export function AIAssistantInterface() {
             {/* Cart Header */}
             <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
               <div className="flex items-center gap-2 font-bold text-sm text-gray-800">
-                <ShoppingCart className="w-4 h-4 text-blue-500" />
+                <ShoppingCart className="w-4 h-4 text-brand-purple" />
                 <span>{t.cartTitle}</span>
-                <span className="bg-blue-50 text-blue-600 text-[10px] px-2 py-0.5 rounded-full border border-blue-100">
+                <span className="bg-brand-purple/10 text-brand-purple text-[10px] px-2 py-0.5 rounded-full border border-brand-purple/10">
                   {cart.reduce((sum, item) => sum + item.quantity, 0)}
                 </span>
               </div>
@@ -599,20 +594,20 @@ export function AIAssistantInterface() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <h4 className="text-[11px] font-bold truncate text-gray-800">{item.title}</h4>
-                          <p className="text-xs font-black text-blue-600 mt-0.5">Rs. {item.price.toLocaleString()}</p>
+                          <p className="text-xs font-black text-brand-purple mt-0.5">Rs. {item.price.toLocaleString()}</p>
                           
                           {/* Quantity adjustments */}
                           <div className="flex items-center gap-2 mt-1.5">
                             <button
                               onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                              className="text-gray-400 hover:text-blue-600 transition-colors"
+                              className="text-gray-400 hover:text-brand-purple transition-colors"
                             >
                               <MinusCircle className="w-3.5 h-3.5" />
                             </button>
                             <span className="text-[11px] font-bold text-gray-700">{item.quantity}</span>
                             <button
                               onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                              className="text-gray-400 hover:text-blue-600 transition-colors"
+                              className="text-gray-400 hover:text-brand-purple transition-colors"
                             >
                               <PlusCircle className="w-3.5 h-3.5" />
                             </button>
@@ -634,10 +629,10 @@ export function AIAssistantInterface() {
                             type="checkbox"
                             checked={item.giftWrap}
                             onChange={(e) => setGiftOptions(item.id, e.target.checked, item.giftMessage)}
-                            className="rounded border-gray-300 bg-white text-blue-600 focus:ring-0 focus:ring-offset-0 w-3 h-3"
+                            className="rounded border-gray-300 bg-white text-brand-purple focus:ring-0 focus:ring-offset-0 w-3 h-3"
                           />
                           <span className="text-[10px] font-bold text-gray-500 flex items-center gap-1">
-                            <Gift className="w-3 h-3 text-blue-500" />
+                            <Gift className="w-3 h-3 text-brand-purple" />
                             {t.giftWrapLabel}
                           </span>
                         </label>
@@ -649,7 +644,7 @@ export function AIAssistantInterface() {
                               value={item.giftMessage}
                               onChange={(e) => setGiftOptions(item.id, item.giftWrap, e.target.value)}
                               placeholder="e.g. Wishing you a happy birthday!"
-                              className="w-full bg-white border border-gray-200 rounded px-2 py-1 text-[10px] text-gray-700 placeholder-gray-300 focus:border-blue-500 outline-none"
+                              className="w-full bg-white border border-gray-200 rounded px-2 py-1 text-[10px] text-gray-700 placeholder-gray-300 focus:border-brand-purple outline-none"
                             />
                           </div>
                         )}
@@ -663,7 +658,7 @@ export function AIAssistantInterface() {
               {cart.length > 0 && (
                 <form onSubmit={handleCalculateDelivery} className="p-3 bg-gray-50 border border-gray-100 rounded-xl space-y-3 mt-4">
                   <h4 className="text-[11px] font-bold text-gray-700 flex items-center gap-1.5 border-b border-gray-200 pb-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-blue-500" />
+                    <MapPin className="w-3.5 h-3.5 text-brand-purple" />
                     Delivery Details
                   </h4>
                   <div className="space-y-2">
@@ -673,7 +668,7 @@ export function AIAssistantInterface() {
                       placeholder="Recipient Name"
                       value={recipientName}
                       onChange={(e) => setRecipientName(e.target.value)}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] text-gray-700 placeholder-gray-400 focus:border-blue-500 outline-none"
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] text-gray-700 placeholder-gray-400 focus:border-brand-purple outline-none"
                     />
                     <input
                       type="text"
@@ -681,7 +676,7 @@ export function AIAssistantInterface() {
                       placeholder="Recipient Phone"
                       value={recipientPhone}
                       onChange={(e) => setRecipientPhone(e.target.value)}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] text-gray-700 placeholder-gray-400 focus:border-blue-500 outline-none"
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] text-gray-700 placeholder-gray-400 focus:border-brand-purple outline-none"
                     />
                     <input
                       type="text"
@@ -689,7 +684,7 @@ export function AIAssistantInterface() {
                       placeholder="Street Address"
                       value={deliveryAddress}
                       onChange={(e) => setDeliveryAddress(e.target.value)}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] text-gray-700 placeholder-gray-400 focus:border-blue-500 outline-none"
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] text-gray-700 placeholder-gray-400 focus:border-brand-purple outline-none"
                     />
                     <div className="grid grid-cols-2 gap-2">
                       <input
@@ -698,7 +693,7 @@ export function AIAssistantInterface() {
                         placeholder="City"
                         value={deliveryCity}
                         onChange={(e) => setDeliveryCity(e.target.value)}
-                        className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] text-gray-700 placeholder-gray-400 focus:border-blue-500 outline-none"
+                        className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] text-gray-700 placeholder-gray-400 focus:border-brand-purple outline-none"
                       />
                       <input
                         type="text"
@@ -706,14 +701,14 @@ export function AIAssistantInterface() {
                         placeholder="District"
                         value={deliveryDistrict}
                         onChange={(e) => setDeliveryDistrict(e.target.value)}
-                        className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] text-gray-700 placeholder-gray-400 focus:border-blue-500 outline-none"
+                        className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] text-gray-700 placeholder-gray-400 focus:border-brand-purple outline-none"
                       />
                     </div>
                     <button
                       type="submit"
                       className="w-full py-2 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-600 flex items-center justify-center gap-1.5 active:scale-97 transition-all"
                     >
-                      <Truck className="w-3.5 h-3.5 text-blue-500" />
+                      <Truck className="w-3.5 h-3.5 text-brand-purple" />
                       Calculate Delivery
                     </button>
                   </div>
@@ -735,7 +730,7 @@ export function AIAssistantInterface() {
                       {deliveryQuote ? `Rs. ${shipping}` : "Pending Quote"}
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm font-black pt-2 border-t border-gray-200 text-blue-600">
+                  <div className="flex justify-between text-sm font-black pt-2 border-t border-gray-200 text-brand-purple">
                     <span>{t.total}:</span>
                     <span>Rs. {total.toLocaleString()}</span>
                   </div>
@@ -754,7 +749,7 @@ export function AIAssistantInterface() {
                 ) : (
                   <button
                     onClick={handleCheckoutHandoff}
-                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center justify-center gap-2 active:scale-98 transition-all"
+                    className="w-full py-2.5 bg-brand-purple hover:bg-brand-purple-light text-white rounded-xl text-xs font-black shadow-sm flex items-center justify-center gap-2 active:scale-98 transition-all"
                   >
                     <CreditCard className="w-4 h-4" />
                     Prepare Pay Link
@@ -794,7 +789,7 @@ export function AIAssistantInterface() {
                   key={index}
                   className="flex items-center gap-2 bg-gray-50 py-1 px-2 rounded-md border border-gray-200"
                 >
-                  <FileText className="w-3 h-3 text-blue-600" />
+                  <FileText className="w-3 h-3 text-brand-purple" />
                   <span className="text-[10px] text-gray-700 font-bold">{file}</span>
                   <button
                     onClick={() => setUploadedFiles((prev) => prev.filter((_, i) => i !== index))}
@@ -815,7 +810,7 @@ export function AIAssistantInterface() {
               onClick={() => setSearchEnabled(!searchEnabled)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all ${
                 searchEnabled
-                  ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                  ? "bg-brand-purple/10 text-brand-purple hover:bg-brand-purple/20"
                   : "bg-gray-100 text-gray-400 hover:bg-gray-200"
               }`}
             >
@@ -826,7 +821,7 @@ export function AIAssistantInterface() {
               onClick={() => setDeepResearchEnabled(!deepResearchEnabled)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all ${
                 deepResearchEnabled
-                  ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                  ? "bg-brand-purple/10 text-brand-purple hover:bg-brand-purple/20"
                   : "bg-gray-100 text-gray-400 hover:bg-gray-200"
               }`}
             >
@@ -836,7 +831,7 @@ export function AIAssistantInterface() {
                 viewBox="0 0 16 16"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
-                className={deepResearchEnabled ? "text-blue-600" : "text-gray-400"}
+                className={deepResearchEnabled ? "text-brand-purple" : "text-gray-400"}
               >
                 <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="2" />
                 <circle cx="8" cy="8" r="3" fill="currentColor" />
@@ -847,7 +842,7 @@ export function AIAssistantInterface() {
               onClick={() => setReasonEnabled(!reasonEnabled)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all ${
                 reasonEnabled
-                  ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                  ? "bg-brand-purple/10 text-brand-purple hover:bg-brand-purple/20"
                   : "bg-gray-100 text-gray-400 hover:bg-gray-200"
               }`}
             >
@@ -865,7 +860,7 @@ export function AIAssistantInterface() {
               disabled={!inputValue.trim()}
               className={`w-7 h-7 flex items-center justify-center rounded-full transition-all ${
                 inputValue.trim()
-                  ? "bg-blue-600 text-white hover:bg-blue-700"
+                  ? "bg-brand-purple text-white hover:bg-brand-purple-light"
                   : "bg-gray-100 text-gray-400 cursor-not-allowed"
               }`}
             >
@@ -897,7 +892,7 @@ export function AIAssistantInterface() {
                 {[...Array(3)].map((_, i) => (
                   <motion.div
                     key={i}
-                    className="w-1.5 h-1.5 bg-blue-600 rounded-full"
+                    className="w-1.5 h-1.5 bg-brand-purple rounded-full"
                     variants={{
                       hidden: { opacity: 0, y: 5 },
                       visible: {
@@ -953,11 +948,11 @@ export function AIAssistantInterface() {
                       className="p-3 hover:bg-gray-50 cursor-pointer transition-colors duration-75 text-xs text-gray-700 flex items-center gap-2.5 font-medium"
                     >
                       {activeCommandCategory === "browse" ? (
-                        <Search className="w-3.5 h-3.5 text-blue-600" />
+                        <Search className="w-3.5 h-3.5 text-brand-purple" />
                       ) : activeCommandCategory === "gifts" ? (
-                        <Gift className="w-3.5 h-3.5 text-blue-600" />
+                        <Gift className="w-3.5 h-3.5 text-brand-purple" />
                       ) : (
-                        <Truck className="w-3.5 h-3.5 text-blue-600" />
+                        <Truck className="w-3.5 h-3.5 text-brand-purple" />
                       )}
                       <span>{suggestion}</span>
                     </motion.li>
@@ -984,11 +979,11 @@ function CommandButton({ icon, label, isActive, onClick }: CommandButtonProps) {
     <motion.button
       onClick={onClick}
       className={`flex flex-col items-center justify-center gap-2.5 p-4 rounded-xl border transition-all ${
-        isActive ? "bg-blue-50 border-blue-200 shadow-sm" : "bg-white border-gray-200 hover:border-gray-300"
+        isActive ? "bg-brand-purple/10 border-brand-purple/20 shadow-sm" : "bg-white border-gray-200 hover:border-gray-300"
       }`}
     >
-      <div className={`${isActive ? "text-blue-600" : "text-gray-400"}`}>{icon}</div>
-      <span className={`text-[11px] font-bold tracking-wide ${isActive ? "text-blue-700" : "text-gray-500"}`}>
+      <div className={`${isActive ? "text-brand-purple" : "text-gray-400"}`}>{icon}</div>
+      <span className={`text-[11px] font-bold tracking-wide ${isActive ? "text-brand-purple" : "text-gray-500"}`}>
         {label}
       </span>
     </motion.button>

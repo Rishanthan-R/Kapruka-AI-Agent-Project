@@ -14,6 +14,12 @@ export default {
   theme: {
     extend: {
       colors: {
+        brand: {
+          purple: '#4f2282',
+          'purple-light': '#6d35ab',
+          yellow: '#ffd500',
+          'yellow-dark': '#e0bb00',
+        },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {
