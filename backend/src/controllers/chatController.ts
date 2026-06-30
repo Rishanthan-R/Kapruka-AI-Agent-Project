@@ -2,6 +2,8 @@ import { Request, Response } from 'express'
 import OpenAI from 'openai'
 import { config } from '../config/env'
 import { McpService } from '../services/mcpService'
+import { writeDebugLog } from '../utils/debugLogger'
+import { trimHistory } from '../utils/contextManager'
 
 const mcpService = McpService.getInstance()
 
@@ -179,18 +181,24 @@ Tool Call Guidelines:
 - To checkout or prepare a pay link for the cart, call "createOrder".
 - To track an existing order, call "trackOrder".
 
+Proactive Recommendations:
+- When a user adds a product to their cart or asks about a product, recommend 2-3 complementary items that would go well with it. For example, if they buy a cake, suggest candles or greeting cards. If they buy flowers, suggest a teddy bear or chocolates. Use "searchProducts" to find real complementary products before suggesting them. Do not guess prices or titles.
+
 Keep answers concise but visually rich. Present products attractively. Always show prices in LKR.
 You support four languages: English (en), Sinhala (si), Tamil (ta), and Tanglish (tanglish - blended Sinhala/English/Tamil).
 The user's current selected language is: '${language || 'en'}'. Adjust your responses to match this language mode seamlessly.`
 
   try {
     // Format chat history for OpenAI format
-    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    let messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: 'system', content: systemPrompt },
       ...formatHistory(history, message)
     ]
 
-    console.log("Full Messages Array:", JSON.stringify(messages, null, 2))
+    // Trim history to prevent context overflow
+    messages = trimHistory(messages, 6000)
+
+    console.log("Full Messages Array (Trimmed):", JSON.stringify(messages, null, 2))
     console.log("Sending initial message to Groq Llama Agent:", message)
 
     const extractToolCalls = (message: any) => {
@@ -248,21 +256,14 @@ The user's current selected language is: '${language || 'en'}'. Adjust your resp
       
       if (toolCalls.length === 0) {
         console.warn("⚠️ Bypassing tool calling. Attempting fallback call without tools...")
-        try {
-          require('fs').writeFileSync(
-            "C:\\Users\\MSII\\.gemini\\antigravity-ide\\brain\\6f326881-a873-41f4-9d4f-6e9edd5fa271\\groq_debug.json",
-            JSON.stringify({
-              context: "inner_tool_call_failed",
-              message: err.message,
-              status: err.status,
-              error: err.error || null,
-              failed_generation: failedGen || null,
-              stack: err.stack
-            }, null, 2)
-          )
-        } catch (fsErr) {
-          console.error("Failed to write debug log", fsErr)
-        }
+        writeDebugLog('groq_debug.json', {
+          context: 'inner_tool_call_failed',
+          message: err.message,
+          status: err.status,
+          error: err.error || null,
+          failed_generation: failedGen || null,
+          stack: err.stack
+        })
         completion = await openai.chat.completions.create({
           model: modelName,
           messages,
@@ -378,20 +379,13 @@ The user's current selected language is: '${language || 'en'}'. Adjust your resp
 
   } catch (error: any) {
     console.error("Error executing Chat Agent:", error)
-    try {
-      require('fs').writeFileSync(
-        "C:\\Users\\MSII\\.gemini\\antigravity-ide\\brain\\6f326881-a873-41f4-9d4f-6e9edd5fa271\\groq_debug.json",
-        JSON.stringify({
-          message: error.message,
-          status: error.status,
-          error: error.error || null,
-          failed_generation: error.error?.failed_generation || null,
-          stack: error.stack
-        }, null, 2)
-      )
-    } catch (fsErr) {
-      console.error("Failed to write debug log", fsErr)
-    }
+    writeDebugLog('groq_debug.json', {
+      message: error.message,
+      status: error.status,
+      error: error.error || null,
+      failed_generation: error.error?.failed_generation || null,
+      stack: error.stack
+    })
     return res.status(500).json({ error: error.message || "An unexpected error occurred in the Groq AI engine." })
   }
 }
@@ -414,4 +408,248 @@ function formatHistory(history: any[], currentMsg: string): OpenAI.Chat.Completi
   return formatted
 }
 
+export const streamChatHandler = async (req: Request, res: Response) => {
+  const { message, history, language } = req.body
+
+  if (!message) {
+    return res.status(400).json({ error: "Message is required." })
+  }
+
+  // Check if API key exists for selected provider
+  if (config.aiProvider === 'huggingface' && (!config.hfToken || config.hfToken === 'MOCK_KEY')) {
+    return res.status(400).json({ error: "HF_TOKEN environment variable is not configured." })
+  }
+  if (config.aiProvider === 'openai' && (!config.openaiApiKey || config.openaiApiKey === 'MOCK_KEY')) {
+    return res.status(400).json({ error: "OPENAI_API_KEY environment variable is not configured." })
+  }
+  if (config.aiProvider === 'groq' && (!config.groqApiKey || config.groqApiKey === 'MOCK_KEY')) {
+    return res.status(400).json({ error: "GROQ_API_KEY environment variable is not configured." })
+  }
+
+  // System prompt defining the witty, helpful Sri Lankan Kapruka shopping assistant
+  const systemPrompt = `You are a high-end, extremely helpful, warm, and witty conversational AI shopping assistant for Kapruka — Sri Lanka's largest e-commerce platform.
+Your personality is friendly, local, and polite (using Sri Lankan hospitality terms like 'Ayubowan', 'Machan' if appropriate, and wishing them a great day).
+
+Tool Call Guidelines:
+- To search for products (e.g. cakes, watches, tea, flowers, toys, gifts), you MUST call "searchProducts" with singular keywords (e.g. 'watch' instead of 'watches', 'cake' instead of 'cakes'). Do not guess or fabricate product lists from your training data.
+- To check delivery city availability or shipping rates to a Sri Lankan city, call "checkDelivery".
+- To checkout or prepare a pay link for the cart, call "createOrder".
+- To track an existing order, call "trackOrder".
+
+Proactive Recommendations:
+- When a user adds a product to their cart or asks about a product, recommend 2-3 complementary items that would go well with it. For example, if they buy a cake, suggest candles or greeting cards. If they buy flowers, suggest a teddy bear or chocolates. Use "searchProducts" to find real complementary products before suggesting them. Do not guess prices or titles.
+
+Keep answers concise but visually rich. Present products attractively. Always show prices in LKR.
+You support four languages: English (en), Sinhala (si), Tamil (ta), and Tanglish (tanglish - blended Sinhala/English/Tamil).
+The user's current selected language is: '${language || 'en'}'. Adjust your responses to match this language mode seamlessly.`
+
+  // Set SSE headers
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders()
+
+  try {
+    // Format chat history for OpenAI format
+    let messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+      { role: 'system', content: systemPrompt },
+      ...formatHistory(history, message)
+    ]
+
+    // Trim history to prevent context overflow
+    messages = trimHistory(messages, 6000)
+
+    let extraData: any = {}
+    let loopCount = 0
+    const maxLoops = 5
+    let currentReply = ""
+    let shouldContinue = true
+
+    const extractToolCalls = (content: string, rawToolCalls?: any[]) => {
+      let tcList = rawToolCalls ? [...rawToolCalls] : []
+      if (tcList.length === 0 && content) {
+        const xmlRegex = /<function=(\w+)[>\s]*({.*?})[>\s]*<\/function>/g
+        let match
+        while ((match = xmlRegex.exec(content)) !== null) {
+          tcList.push({
+            id: `synthetic_${Math.random().toString(36).substr(2, 9)}`,
+            type: 'function',
+            function: {
+              name: match[1],
+              arguments: match[2]
+            }
+          })
+        }
+      }
+      return tcList
+    }
+
+    while (shouldContinue && loopCount < maxLoops) {
+      loopCount++
+      let stream: any = null
+      let failedGen: string | null = null
+
+      try {
+        stream = await openai.chat.completions.create({
+          model: modelName,
+          messages,
+          tools: shoppingTools,
+          tool_choice: "auto",
+          max_tokens: config.aiMaxTokens,
+          temperature: config.aiTemperature,
+          stream: true
+        })
+      } catch (err: any) {
+        console.warn("⚠️ Streaming request failed, checking failed_generation in error...", err)
+        failedGen = err.error?.failed_generation || err.failed_generation
+        if (!failedGen) {
+          throw err
+        }
+      }
+
+      let accumulatedContent = ""
+      let accumulatedToolCalls: any[] = []
+
+      if (stream) {
+        try {
+          for await (const chunk of stream) {
+            const choice = chunk.choices[0]
+            if (!choice) continue
+
+            const token = choice.delta?.content
+            if (token) {
+              accumulatedContent += token
+              res.write(`event: token\ndata: ${JSON.stringify({ token })}\n\n`)
+            }
+
+            const toolCallsDelta = choice.delta?.tool_calls
+            if (toolCallsDelta) {
+              for (const tcDelta of toolCallsDelta) {
+                const idx = tcDelta.index
+                if (idx === undefined) continue
+                if (!accumulatedToolCalls[idx]) {
+                  accumulatedToolCalls[idx] = {
+                    id: tcDelta.id || '',
+                    type: 'function',
+                    function: { name: tcDelta.function?.name || '', arguments: '' }
+                  }
+                }
+                if (tcDelta.id) {
+                  accumulatedToolCalls[idx].id = tcDelta.id
+                }
+                if (tcDelta.function?.name) {
+                  accumulatedToolCalls[idx].function.name = tcDelta.function.name
+                }
+                if (tcDelta.function?.arguments) {
+                  accumulatedToolCalls[idx].function.arguments += tcDelta.function.arguments
+                }
+              }
+            }
+          }
+        } catch (streamErr: any) {
+          console.warn("⚠️ Error occurred during stream iteration:", streamErr)
+          const streamFailedGen = streamErr.error?.failed_generation || streamErr.failed_generation
+          if (streamFailedGen) {
+            console.log("🎯 Extracted failed_generation XML from stream error:", streamFailedGen)
+            accumulatedContent = streamFailedGen
+          } else {
+            throw streamErr
+          }
+        }
+      } else if (failedGen) {
+        accumulatedContent = failedGen
+      }
+
+      const toolCalls = extractToolCalls(accumulatedContent, accumulatedToolCalls.filter(Boolean))
+
+      if (toolCalls.length > 0) {
+        const assistantMessage: any = {
+          role: 'assistant',
+          content: accumulatedContent || null
+        }
+        if (accumulatedToolCalls.length > 0) {
+          assistantMessage.tool_calls = toolCalls
+        }
+        messages.push(assistantMessage)
+
+        for (const toolCall of toolCalls) {
+          const name = toolCall.function.name
+          let args: any = {}
+          try {
+            args = JSON.parse(toolCall.function.arguments)
+          } catch {
+            console.warn("Failed to parse tool arguments:", toolCall.function.arguments)
+          }
+
+          // Emit tool start
+          res.write(`event: tool_start\ndata: ${JSON.stringify({ name, arguments: args })}\n\n`)
+
+          let functionResult: any = {}
+          if (name === "searchProducts") {
+            const searchQuery = args.q || args.query || ''
+            const products = await mcpService.searchProducts(searchQuery, args.category)
+            functionResult = { products }
+            extraData.products = products
+          } else if (name === "browseCategories") {
+            const result = await mcpService.browseCategories(args.depth || 1)
+            functionResult = result
+            extraData.categories = result.categories
+          } else if (name === "getProduct") {
+            const product = await mcpService.getProduct(args.productId)
+            functionResult = product
+          } else if (name === "checkDelivery") {
+            const quote = await mcpService.quoteDelivery(args.address || '', args.city, args.district || '')
+            functionResult = quote
+            extraData.deliveryQuote = quote
+          } else if (name === "listDeliveryCities") {
+            const cities = await mcpService.listDeliveryCities(args.query)
+            functionResult = cities
+          } else if (name === "createOrder") {
+            const checkout = await mcpService.createGuestCheckout(
+              args.items,
+              { name: args.recipientName, phone: args.recipientPhone },
+              { address: args.deliveryAddress, city: args.deliveryCity },
+              { name: args.senderName || args.recipientName },
+              args.giftMessage
+            )
+            functionResult = checkout
+            extraData.checkoutLink = checkout.checkoutLink
+          } else if (name === "trackOrder") {
+            const status = await mcpService.trackOrder(args.orderNumber)
+            functionResult = status
+            extraData.orderStatus = status
+          }
+
+          // Emit tool result
+          res.write(`event: tool_result\ndata: ${JSON.stringify({ name, result: functionResult })}\n\n`)
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(functionResult)
+          })
+        }
+      } else {
+        currentReply = accumulatedContent
+        shouldContinue = false
+      }
+    }
+
+    res.write(`event: done\ndata: ${JSON.stringify({ reply: currentReply, ...extraData })}\n\n`)
+    res.end()
+
+  } catch (error: any) {
+    console.error("Error in streamChatHandler:", error)
+    writeDebugLog('groq_stream_debug.json', {
+      message: error.message,
+      status: error.status,
+      error: error.error || null,
+      stack: error.stack
+    })
+    res.write(`event: error\ndata: ${JSON.stringify({ error: error.message || "An error occurred in the streaming chat engine." })}\n\n`)
+    res.end()
+  }
+}
+
 // Trigger nodemon file watcher restart 6
+

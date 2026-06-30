@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 export interface Product {
   id: string
@@ -10,6 +11,12 @@ export interface Product {
 }
 
 export interface CartItem extends Product {
+  id: string
+  title: string
+  price: number
+  imageUrl: string
+  description?: string
+  availability: boolean
   quantity: number
   giftWrap: boolean
   giftMessage: string
@@ -27,7 +34,7 @@ export interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
-  timestamp: Date
+  timestamp: Date | string
   products?: Product[]
   deliveryQuote?: DeliveryQuote
   checkoutLink?: string
@@ -35,6 +42,10 @@ export interface Message {
     id: string
     status: string
     deliveryDate: string
+    recipient?: string
+    progress?: string
+    hasDeliveryPhoto?: boolean
+    hasDeliveryVideo?: boolean
   }
 }
 
@@ -70,6 +81,10 @@ interface AppState {
   checkoutLink: string | null
   createCheckout: (recipientName: string, recipientPhone: string) => Promise<string>
   resetCheckout: () => void
+
+  // Theme State
+  darkMode: boolean
+  toggleDarkMode: () => void
 }
 
 // Translations dictionary for dynamic UI elements and responses
@@ -196,8 +211,10 @@ const sampleProducts: Product[] = [
   }
 ]
 
-export const useStore = create<AppState>((set, get) => ({
-  language: 'en',
+export const useStore = create<AppState>()(
+  persist(
+    (set, get) => ({
+      language: 'en',
   setLanguage: (lang) => set({ language: lang }),
 
   messages: [
@@ -233,7 +250,7 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
       
-      const response = await fetch(`${apiUrl}/chat`, {
+      const response = await fetch(`${apiUrl}/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -249,32 +266,137 @@ export const useStore = create<AppState>((set, get) => ({
         throw new Error(`HTTP error: ${response.status}`)
       }
 
-      const data = await response.json()
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      if (!reader) throw new Error("Could not construct reader on stream body.")
 
-      // Set tool states in store based on backend response payloads
-      if (data.deliveryQuote) {
-        set({ deliveryQuote: data.deliveryQuote })
-      }
-      if (data.checkoutLink) {
-        set({ checkoutLink: data.checkoutLink })
-      }
-
-      const assistantMsg: Message = {
-        id: `m_assistant_${Date.now()}`,
-        role: 'assistant',
-        content: data.reply || "I'm sorry, I couldn't process that response.",
-        timestamp: new Date(),
-        products: data.products,
-        deliveryQuote: data.deliveryQuote,
-        checkoutLink: data.checkoutLink,
-        orderStatus: data.orderStatus
-      }
-
+      let buffer = ""
+      let assistantMsgId = `m_assistant_${Date.now()}`
+      
       set((state) => ({
-        messages: [...state.messages, assistantMsg],
-        isTyping: false,
-        isSearching: false
+        messages: [
+          ...state.messages,
+          {
+            id: assistantMsgId,
+            role: 'assistant',
+            content: "",
+            timestamp: new Date()
+          }
+        ],
+        isTyping: false
       }))
+
+      let accumulatedContent = ""
+      let accumulatedProducts: Product[] = []
+      let accumulatedQuote: any = null
+      let accumulatedCheckout: string | null = null
+      let accumulatedStatus: any = null
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() || ""
+
+        let currentEvent = ""
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+
+          if (trimmed.startsWith("event:")) {
+            currentEvent = trimmed.replace("event:", "").trim()
+          } else if (trimmed.startsWith("data:")) {
+            const dataStr = trimmed.replace("data:", "").trim()
+            try {
+              const dataObj = JSON.parse(dataStr)
+
+              if (currentEvent === "token") {
+                accumulatedContent += dataObj.token
+                set((state) => ({
+                  messages: state.messages.map((m) =>
+                    m.id === assistantMsgId
+                      ? { ...m, content: accumulatedContent }
+                      : m
+                  )
+                }))
+              } else if (currentEvent === "tool_start") {
+                set({ isSearching: true })
+              } else if (currentEvent === "tool_result") {
+                set({ isSearching: false })
+                if (dataObj.name === "searchProducts" && dataObj.result?.products) {
+                  accumulatedProducts = [...accumulatedProducts, ...dataObj.result.products]
+                  set((state) => ({
+                    messages: state.messages.map((m) =>
+                      m.id === assistantMsgId
+                        ? { ...m, products: accumulatedProducts }
+                        : m
+                    )
+                  }))
+                } else if (dataObj.name === "checkDelivery" && dataObj.result) {
+                  accumulatedQuote = dataObj.result
+                  set({ deliveryQuote: accumulatedQuote })
+                  set((state) => ({
+                    messages: state.messages.map((m) =>
+                      m.id === assistantMsgId
+                        ? { ...m, deliveryQuote: accumulatedQuote }
+                        : m
+                    )
+                  }))
+                } else if (dataObj.name === "createOrder" && dataObj.result?.checkoutLink) {
+                  accumulatedCheckout = dataObj.result.checkoutLink
+                  set({ checkoutLink: accumulatedCheckout })
+                  set((state) => ({
+                    messages: state.messages.map((m) =>
+                      m.id === assistantMsgId
+                        ? { ...m, checkoutLink: accumulatedCheckout }
+                        : m
+                    )
+                  }))
+                } else if (dataObj.name === "trackOrder" && dataObj.result) {
+                  accumulatedStatus = dataObj.result
+                  set((state) => ({
+                    messages: state.messages.map((m) =>
+                      m.id === assistantMsgId
+                        ? { ...m, orderStatus: accumulatedStatus }
+                        : m
+                    )
+                  }))
+                }
+              } else if (currentEvent === "done") {
+                set({ isSearching: false, isTyping: false })
+                set((state) => ({
+                  messages: state.messages.map((m) =>
+                    m.id === assistantMsgId
+                      ? {
+                          ...m,
+                          content: dataObj.reply || accumulatedContent,
+                          products: dataObj.products || accumulatedProducts,
+                          deliveryQuote: dataObj.deliveryQuote || accumulatedQuote,
+                          checkoutLink: dataObj.checkoutLink || accumulatedCheckout,
+                          orderStatus: dataObj.orderStatus || accumulatedStatus
+                        }
+                      : m
+                  )
+                }))
+              } else if (currentEvent === "error") {
+                set({ isSearching: false, isTyping: false })
+                set((state) => ({
+                  messages: state.messages.map((m) =>
+                    m.id === assistantMsgId
+                      ? { ...m, content: `Error: ${dataObj.error || "Failed to process message."}` }
+                      : m
+                  )
+                }))
+              }
+            } catch (err) {
+              console.warn("Failed to parse SSE data packet:", dataStr, err)
+            }
+          }
+        }
+      }
 
     } catch (error) {
       console.error("Backend communication failed, running local backup simulation:", error)
@@ -357,19 +479,36 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Cart Management
   cart: [],
-  addToCart: (product) => set((state) => {
-    const existing = state.cart.find((item) => item.id === product.id)
-    if (existing) {
-      return {
-        cart: state.cart.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
-        )
+  addToCart: (product) => {
+    const state = get()
+    const currentLang = state.language
+    let promptMsg = ""
+    if (currentLang === "si") {
+      promptMsg = `මම "${product.title}" මගේ කරත්තයට එක් කළා. කරුණාකර මීට ගැලපෙන වෙනත් තෑගි/භාණ්ඩ 2-3ක් යෝජනා කරන්න.`
+    } else if (currentLang === "tanglish") {
+      promptMsg = `මම "${product.title}" එක cart එකට add කළා. මීට ගැලපෙන matching items 2-3ක් suggest කරන්න.`
+    } else {
+      promptMsg = `I added "${product.title}" to my cart. Suggest 2-3 matching complementary items.`
+    }
+
+    setTimeout(() => {
+      get().sendMessage(promptMsg)
+    }, 450)
+
+    set((state) => {
+      const existing = state.cart.find((item) => item.id === product.id)
+      if (existing) {
+        return {
+          cart: state.cart.map((item) =>
+            item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          )
+        }
       }
-    }
-    return {
-      cart: [...state.cart, { ...product, quantity: 1, giftWrap: false, giftMessage: "" }]
-    }
-  }),
+      return {
+        cart: [...state.cart, { ...product, quantity: 1, giftWrap: false, giftMessage: "" }]
+      }
+    })
+  },
 
   removeFromCart: (productId) => set((state) => ({
     cart: state.cart.filter((item) => item.id !== productId)
@@ -455,5 +594,29 @@ export const useStore = create<AppState>((set, get) => ({
     return payLink
   },
 
-  resetCheckout: () => set({ checkoutLink: null })
+  resetCheckout: () => set({ checkoutLink: null }),
+
+  // Theme management
+  darkMode: false,
+  toggleDarkMode: () => set((state) => {
+    const nextDark = !state.darkMode
+    if (typeof window !== 'undefined') {
+      if (nextDark) {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+      }
+    }
+    return { darkMode: nextDark }
+  })
+}), {
+  name: 'kapruka-shopping-companion-store',
+  partialize: (state) => ({
+    language: state.language,
+    messages: state.messages,
+    cart: state.cart,
+    deliveryQuote: state.deliveryQuote,
+    checkoutLink: state.checkoutLink,
+    darkMode: state.darkMode
+  })
 }))

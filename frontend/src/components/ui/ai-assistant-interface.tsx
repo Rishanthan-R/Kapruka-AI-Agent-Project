@@ -20,6 +20,8 @@ import {
   PlusCircle,
   MinusCircle,
   CreditCard,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore, translations } from "../../store/useStore";
@@ -45,7 +47,13 @@ export function AIAssistantInterface() {
     quoteDelivery,
     checkoutLink,
     createCheckout,
+    darkMode,
+    toggleDarkMode,
   } = useStore();
+
+  const [mounted, setMounted] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   const [inputValue, setInputValue] = useState("");
   const [searchEnabled, setSearchEnabled] = useState(false);
@@ -67,6 +75,61 @@ export function AIAssistantInterface() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const t = translations[language];
+
+  // Initialize and keep document theme class in sync
+  useEffect(() => {
+    setMounted(true);
+    if (darkMode) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [darkMode]);
+
+  // Speech Recognition effect
+  useEffect(() => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const rec = new SpeechRecognition();
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.lang = language === "si" ? "si-LK" : language === "ta" ? "ta-LK" : "en-US";
+
+      rec.onstart = () => {
+        setIsListening(true);
+      };
+
+      rec.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInputValue(transcript);
+      };
+
+      rec.onerror = (event: any) => {
+        console.error("Speech recognition error:", event.error);
+        setIsListening(false);
+      };
+
+      rec.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = rec;
+    }
+  }, [language]);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+      alert("Speech recognition is not supported in this browser.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      recognitionRef.current.start();
+    }
+  };
 
   // Map suggestion categories for Kapruka shopping companion intents
   const commandSuggestions = {
@@ -236,10 +299,10 @@ export function AIAssistantInterface() {
   const isLandingState = messages.length <= 1;
 
   return (
-    <div className="h-screen w-screen flex bg-gray-50 overflow-hidden font-sans text-gray-700">
+    <div className="h-screen w-screen flex bg-gray-50 dark:bg-zinc-950 overflow-hidden font-sans text-gray-700 dark:text-zinc-200">
       
       {/* MAIN WORKSPACE: Chat thread & prompts */}
-      <div className="flex-1 flex flex-col h-full bg-white relative overflow-hidden">
+      <div className="flex-1 flex flex-col h-full bg-white dark:bg-zinc-950 relative overflow-hidden">
         
         {/* Navigation / Header */}
         <header className="h-16 border-b border-brand-purple-light/10 px-6 flex items-center justify-between bg-brand-purple text-white z-10 shrink-0 shadow-md">
@@ -271,6 +334,14 @@ export function AIAssistantInterface() {
               className="text-xs px-2.5 py-1 rounded-md border border-white/20 hover:bg-white/10 transition-all text-white font-bold"
             >
               Clear
+            </button>
+
+            <button
+              onClick={toggleDarkMode}
+              className="p-2 rounded-full border border-white/20 bg-white/10 hover:bg-white/20 text-purple-200 hover:text-white transition-all"
+              title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            >
+              {darkMode ? <Sun className="w-4 h-4 text-brand-yellow" /> : <Moon className="w-4 h-4 text-purple-200" />}
             </button>
 
             <button
@@ -361,7 +432,7 @@ export function AIAssistantInterface() {
           </div>
         ) : (
           /* Conversation Thread UI */
-          <div className="flex-1 flex flex-col min-h-0 bg-white">
+          <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-zinc-950">
             
             {/* Scrollable messages container */}
             <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
@@ -380,7 +451,7 @@ export function AIAssistantInterface() {
                         className={`max-w-[85%] rounded-2xl p-4 shadow-sm flex flex-col gap-2 ${
                           message.role === "user"
                             ? "bg-brand-purple text-white rounded-tr-none"
-                            : "bg-gray-50 border border-gray-100 text-gray-800 rounded-tl-none"
+                            : "bg-gray-50 dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 text-gray-800 dark:text-zinc-100 rounded-tl-none"
                         }`}
                       >
                         {/* Text Content */}
@@ -390,29 +461,29 @@ export function AIAssistantInterface() {
 
                         {/* Product lists */}
                         {message.products && message.products.length > 0 && (
-                          <div className="mt-3 overflow-x-auto py-2 -mx-2 flex gap-4 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
+                          <div className="mt-3 overflow-x-auto py-2 -mx-2 flex gap-4 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
                             {message.products.map((product) => (
                               <div
                                 key={product.id}
-                                className="min-w-[220px] max-w-[220px] rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col justify-between shadow-sm hover:border-brand-purple/40 transition-all duration-300 group"
+                                className="min-w-[220px] max-w-[220px] rounded-xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden flex flex-col justify-between shadow-sm hover:border-brand-purple/40 transition-all duration-300 group"
                               >
-                                <div className="relative h-28 w-full overflow-hidden bg-gray-50">
+                                <div className="relative h-28 w-full overflow-hidden bg-gray-50 dark:bg-zinc-800">
                                   <img
                                     src={product.imageUrl}
                                     alt={product.title}
                                     className="h-full w-full object-cover group-hover:scale-102 transition-all duration-300"
                                   />
-                                  <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm border border-gray-100 rounded-full px-2 py-0.5 flex items-center gap-1">
+                                  <div className="absolute top-2 right-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm border border-gray-100 dark:border-zinc-800 rounded-full px-2 py-0.5 flex items-center gap-1">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                    <span className="text-[9px] font-bold text-emerald-600">In Stock</span>
+                                    <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">In Stock</span>
                                   </div>
                                 </div>
                                 <div className="p-3 flex-1 flex flex-col justify-between gap-2">
                                   <div>
-                                    <h4 className="text-xs font-bold line-clamp-1 text-gray-800 group-hover:text-brand-purple transition-colors">
+                                    <h4 className="text-xs font-bold line-clamp-1 text-gray-800 dark:text-zinc-200 group-hover:text-brand-purple transition-colors">
                                       {product.title}
                                     </h4>
-                                    <p className="text-[9px] text-gray-400 line-clamp-2 mt-1">
+                                    <p className="text-[9px] text-gray-400 dark:text-zinc-400 line-clamp-2 mt-1">
                                       {product.description}
                                     </p>
                                   </div>
@@ -471,8 +542,106 @@ export function AIAssistantInterface() {
                           </div>
                         )}
 
+                        {/* Order Tracking Timeline Card */}
+                        {message.orderStatus && (
+                          <div className="mt-2 p-4 rounded-xl border border-brand-purple/10 bg-gray-50/50 dark:bg-zinc-800/80 dark:border-zinc-700 flex flex-col gap-3 text-xs text-gray-700 dark:text-zinc-200 max-w-sm shadow-inner">
+                            <div className="flex items-center justify-between text-brand-purple dark:text-brand-purple-light font-bold">
+                              <div className="flex items-center gap-2">
+                                <BookOpen className="w-3.5 h-3.5" />
+                                <span>Order Status: #{message.orderStatus.id}</span>
+                              </div>
+                              <span className="text-[10px] bg-brand-purple/10 dark:bg-brand-purple/20 px-2 py-0.5 rounded-full font-black uppercase tracking-wider text-brand-purple dark:text-brand-purple-light">
+                                {message.orderStatus.status}
+                              </span>
+                            </div>
+                            
+                            {/* Stepper Timeline */}
+                            <div className="flex items-center justify-between relative mt-2 px-2">
+                              {/* Connector line behind */}
+                              <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 h-0.5 bg-gray-200 dark:bg-zinc-700 z-0"></div>
+                              
+                              {/* Step 1: Placed */}
+                              <div className="flex flex-col items-center gap-1 z-10">
+                                <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold bg-brand-purple text-white ring-4 ring-brand-purple/10 dark:ring-brand-purple/20">
+                                  1
+                                </div>
+                                <span className="text-[8px] font-bold text-gray-500 dark:text-zinc-400">Placed</span>
+                              </div>
+
+                              {/* Step 2: Processing */}
+                              <div className="flex flex-col items-center gap-1 z-10">
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                  ["processing", "preparing", "dispatched", "shipped", "delivered", "completed", "ready"].includes(message.orderStatus.status.toLowerCase()) || 
+                                  (message.orderStatus.progress && ["processing", "prepared", "dispatched", "delivered"].includes(message.orderStatus.progress.toLowerCase()))
+                                    ? "bg-brand-purple text-white ring-4 ring-brand-purple/10 dark:ring-brand-purple/20"
+                                    : "bg-gray-200 dark:bg-zinc-700 text-gray-400 dark:text-zinc-500"
+                                }`}>
+                                  2
+                                </div>
+                                <span className="text-[8px] font-bold text-gray-500 dark:text-zinc-400">Process</span>
+                              </div>
+
+                              {/* Step 3: Dispatched */}
+                              <div className="flex flex-col items-center gap-1 z-10">
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                  ["dispatched", "shipped", "delivered", "completed"].includes(message.orderStatus.status.toLowerCase()) ||
+                                  (message.orderStatus.progress && ["dispatched", "delivered"].includes(message.orderStatus.progress.toLowerCase()))
+                                    ? "bg-brand-purple text-white ring-4 ring-brand-purple/10 dark:ring-brand-purple/20"
+                                    : "bg-gray-200 dark:bg-zinc-700 text-gray-400 dark:text-zinc-500"
+                                }`}>
+                                  3
+                                </div>
+                                <span className="text-[8px] font-bold text-gray-500 dark:text-zinc-400">Dispatch</span>
+                              </div>
+
+                              {/* Step 4: Delivered */}
+                              <div className="flex flex-col items-center gap-1 z-10">
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                  ["delivered", "completed"].includes(message.orderStatus.status.toLowerCase()) ||
+                                  (message.orderStatus.progress && ["delivered"].includes(message.orderStatus.progress.toLowerCase()))
+                                    ? "bg-brand-purple text-white ring-4 ring-brand-purple/10 dark:ring-brand-purple/20"
+                                    : "bg-gray-200 dark:bg-zinc-700 text-gray-400 dark:text-zinc-500"
+                                }`}>
+                                  4
+                                </div>
+                                <span className="text-[8px] font-bold text-gray-500 dark:text-zinc-400">Deliver</span>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-y-1 mt-2 pt-2 border-t border-gray-100 dark:border-zinc-700 text-[10px]">
+                              <span className="text-gray-400 dark:text-zinc-500">Delivery Date:</span>
+                              <span className="text-right font-semibold text-gray-700 dark:text-zinc-300">{message.orderStatus.deliveryDate}</span>
+                              
+                              {message.orderStatus.recipient && (
+                                <>
+                                  <span className="text-gray-400 dark:text-zinc-500">Recipient:</span>
+                                  <span className="text-right font-semibold text-gray-700 dark:text-zinc-300">
+                                    {typeof message.orderStatus.recipient === 'object'
+                                      ? `${(message.orderStatus.recipient as any).name || ''} (${(message.orderStatus.recipient as any).phone || ''})`
+                                      : message.orderStatus.recipient}
+                                  </span>
+                                </>
+                              )}
+
+                              {(message.orderStatus.hasDeliveryPhoto || message.orderStatus.hasDeliveryVideo) && (
+                                <>
+                                  <span className="text-gray-400 dark:text-zinc-500">Proof:</span>
+                                  <span className="text-right text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-end gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    {message.orderStatus.hasDeliveryPhoto && "Photo"}
+                                    {message.orderStatus.hasDeliveryPhoto && message.orderStatus.hasDeliveryVideo && " & "}
+                                    {message.orderStatus.hasDeliveryVideo && "Video"} Available
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         <span className={`text-[8px] mt-1 text-right ${message.role === "user" ? "text-purple-200" : "text-gray-400"}`}>
-                          {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          {typeof message.timestamp === "string"
+                            ? new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                            : message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
                     </motion.div>
@@ -482,21 +651,25 @@ export function AIAssistantInterface() {
                 {/* Skeletons */}
                 {isTyping && (
                   <div className="flex justify-start">
-                    <div className="bg-gray-50 border border-gray-100 rounded-2xl rounded-tl-none p-4 w-48 flex flex-col gap-2">
-                      <div className="h-2.5 bg-gray-200 rounded animate-pulse w-3/4"></div>
-                      <div className="h-2.5 bg-gray-200 rounded animate-pulse w-1/2"></div>
-                      <div className="h-2.5 bg-gray-200 rounded animate-pulse w-5/6"></div>
+                    <div className="bg-gray-50 dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl rounded-tl-none p-4 w-48 flex flex-col gap-2">
+                      <div className="h-2.5 bg-gray-200 dark:bg-zinc-800 rounded animate-pulse w-3/4"></div>
+                      <div className="h-2.5 bg-gray-200 dark:bg-zinc-800 rounded animate-pulse w-1/2"></div>
+                      <div className="h-2.5 bg-gray-200 dark:bg-zinc-800 rounded animate-pulse w-5/6"></div>
                     </div>
                   </div>
                 )}
                 {isSearching && (
-                  <div className="flex justify-start">
+                  <div className="flex flex-col gap-2 justify-start items-start">
+                    <div className="flex items-center gap-2 text-xs font-bold text-brand-purple dark:text-brand-purple-light animate-pulse">
+                      <Search className="w-3.5 h-3.5 animate-spin" />
+                      <span>Searching live Kapruka catalog...</span>
+                    </div>
                     <div className="flex gap-4 overflow-hidden w-full">
                       {[...Array(2)].map((_, idx) => (
-                        <div key={idx} className="min-w-[180px] rounded-xl border border-gray-200 bg-white p-3 flex flex-col gap-3">
-                          <div className="h-20 bg-gray-100 rounded-lg animate-pulse"></div>
-                          <div className="h-2.5 bg-gray-100 rounded animate-pulse w-2/3"></div>
-                          <div className="h-2.5 bg-gray-100 rounded animate-pulse w-1/2"></div>
+                        <div key={idx} className="min-w-[180px] rounded-xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 flex flex-col gap-3">
+                          <div className="h-20 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse"></div>
+                          <div className="h-2.5 bg-gray-100 dark:bg-zinc-800 rounded animate-pulse w-2/3"></div>
+                          <div className="h-2.5 bg-gray-100 dark:bg-zinc-800 rounded animate-pulse w-1/2"></div>
                         </div>
                       ))}
                     </div>
@@ -507,7 +680,7 @@ export function AIAssistantInterface() {
             </div>
 
             {/* Anchored bottom input block */}
-            <div className="border-t border-gray-100 p-4 bg-white z-10 shrink-0">
+            <div className="border-t border-gray-100 dark:border-zinc-900 p-4 bg-white dark:bg-zinc-950 z-10 shrink-0">
               <div className="max-w-2xl mx-auto w-full flex flex-col gap-2">
                 {renderInputBox()}
                 
@@ -519,8 +692,8 @@ export function AIAssistantInterface() {
                       onClick={() => setActiveCommandCategory(activeCommandCategory === cat ? null : cat)}
                       className={`px-3 py-1 rounded-full border text-[11px] font-bold flex items-center gap-1.5 transition-all ${
                         activeCommandCategory === cat
-                          ? "bg-brand-purple/10 border-brand-purple/20 text-brand-purple"
-                          : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
+                          ? "bg-brand-purple/10 dark:bg-brand-purple/20 border-brand-purple/20 text-brand-purple dark:text-brand-purple-light"
+                          : "bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 text-gray-500 dark:text-zinc-400 hover:border-gray-300 dark:hover:border-zinc-700"
                       }`}
                     >
                       {cat === "browse" ? <Search className="w-3 h-3" /> : cat === "gifts" ? <Gift className="w-3 h-3" /> : <Truck className="w-3 h-3" />}
@@ -546,14 +719,14 @@ export function AIAssistantInterface() {
             animate={{ width: 350, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.25, ease: "easeInOut" }}
-            className="h-full bg-white border-l border-gray-100 flex flex-col z-10 shadow-lg relative shrink-0"
+            className="h-full bg-white dark:bg-zinc-950 border-l border-gray-100 dark:border-zinc-900 flex flex-col z-10 shadow-lg relative shrink-0"
           >
             {/* Cart Header */}
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-              <div className="flex items-center gap-2 font-bold text-sm text-gray-800">
+            <div className="p-4 border-b border-gray-100 dark:border-zinc-900 flex items-center justify-between bg-gray-50/50 dark:bg-zinc-900/50">
+              <div className="flex items-center gap-2 font-bold text-sm text-gray-800 dark:text-zinc-200">
                 <ShoppingCart className="w-4 h-4 text-brand-purple" />
                 <span>{t.cartTitle}</span>
-                <span className="bg-brand-purple/10 text-brand-purple text-[10px] px-2 py-0.5 rounded-full border border-brand-purple/10">
+                <span className="bg-brand-purple/10 text-brand-purple text-[10px] px-2 py-0.5 rounded-full border border-brand-purple/10 dark:border-brand-purple/20">
                   {cart.reduce((sum, item) => sum + item.quantity, 0)}
                 </span>
               </div>
@@ -570,7 +743,7 @@ export function AIAssistantInterface() {
                 )}
                 <button
                   onClick={() => setIsCartOpen(false)}
-                  className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+                  className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -581,19 +754,19 @@ export function AIAssistantInterface() {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {cart.length === 0 ? (
                 <div className="h-48 flex flex-col items-center justify-center text-center gap-3 text-gray-400">
-                  <ShoppingCart className="w-7 h-7 stroke-1 text-gray-300" />
+                  <ShoppingCart className="w-7 h-7 stroke-1 text-gray-300 dark:text-zinc-600" />
                   <p className="text-xs">{t.emptyCart}</p>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {cart.map((item) => (
-                    <div key={item.id} className="p-3 bg-white border border-gray-100 rounded-xl flex flex-col gap-2.5 shadow-sm">
+                    <div key={item.id} className="p-3 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-xl flex flex-col gap-2.5 shadow-sm">
                       <div className="flex gap-2.5">
-                        <div className="w-12 h-12 rounded-lg bg-gray-50 overflow-hidden shrink-0 border border-gray-100">
+                        <div className="w-12 h-12 rounded-lg bg-gray-50 dark:bg-zinc-800 overflow-hidden shrink-0 border border-gray-100 dark:border-zinc-800">
                           <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h4 className="text-[11px] font-bold truncate text-gray-800">{item.title}</h4>
+                          <h4 className="text-[11px] font-bold truncate text-gray-800 dark:text-zinc-200">{item.title}</h4>
                           <p className="text-xs font-black text-brand-purple mt-0.5">Rs. {item.price.toLocaleString()}</p>
                           
                           {/* Quantity adjustments */}
@@ -604,7 +777,7 @@ export function AIAssistantInterface() {
                             >
                               <MinusCircle className="w-3.5 h-3.5" />
                             </button>
-                            <span className="text-[11px] font-bold text-gray-700">{item.quantity}</span>
+                            <span className="text-[11px] font-bold text-gray-700 dark:text-zinc-300">{item.quantity}</span>
                             <button
                               onClick={() => updateQuantity(item.id, item.quantity + 1)}
                               className="text-gray-400 hover:text-brand-purple transition-colors"
@@ -767,8 +940,8 @@ export function AIAssistantInterface() {
   // Helper renderer: Prompt input box matching user template style
   function renderInputBox() {
     return (
-      <div className="w-full bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-4 max-w-2xl mx-auto">
-        <div className="p-4 flex items-center bg-white">
+      <div className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl shadow-sm overflow-hidden mb-4 max-w-2xl mx-auto">
+        <div className="p-4 flex items-center bg-white dark:bg-zinc-900">
           <input
             ref={inputRef}
             type="text"
@@ -776,24 +949,24 @@ export function AIAssistantInterface() {
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-            className="w-full text-gray-700 text-sm outline-none placeholder:text-gray-400 bg-white"
+            className="w-full text-gray-700 dark:text-zinc-100 text-sm outline-none placeholder:text-gray-400 bg-white dark:bg-zinc-900"
           />
         </div>
 
         {/* Uploaded files preview */}
         {uploadedFiles.length > 0 && (
-          <div className="px-4 pb-3 bg-white">
+          <div className="px-4 pb-3 bg-white dark:bg-zinc-900">
             <div className="flex flex-wrap gap-2">
               {uploadedFiles.map((file, index) => (
                 <div
                   key={index}
-                  className="flex items-center gap-2 bg-gray-50 py-1 px-2 rounded-md border border-gray-200"
+                  className="flex items-center gap-2 bg-gray-50 dark:bg-zinc-800 py-1 px-2 rounded-md border border-gray-200 dark:border-zinc-700"
                 >
                   <FileText className="w-3 h-3 text-brand-purple" />
-                  <span className="text-[10px] text-gray-700 font-bold">{file}</span>
+                  <span className="text-[10px] text-gray-700 dark:text-zinc-200 font-bold">{file}</span>
                   <button
                     onClick={() => setUploadedFiles((prev) => prev.filter((_, i) => i !== index))}
-                    className="text-gray-400 hover:text-gray-600"
+                    className="text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-350"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -804,14 +977,14 @@ export function AIAssistantInterface() {
         )}
 
         {/* Action button bar */}
-        <div className="px-4 py-3 flex items-center justify-between border-t border-gray-50 bg-white">
+        <div className="px-4 py-3 flex items-center justify-between border-t border-gray-50 dark:border-zinc-800 bg-white dark:bg-zinc-900">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setSearchEnabled(!searchEnabled)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all ${
                 searchEnabled
                   ? "bg-brand-purple/10 text-brand-purple hover:bg-brand-purple/20"
-                  : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                  : "bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-700"
               }`}
             >
               <Search className="w-3.5 h-3.5" />
@@ -822,7 +995,7 @@ export function AIAssistantInterface() {
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all ${
                 deepResearchEnabled
                   ? "bg-brand-purple/10 text-brand-purple hover:bg-brand-purple/20"
-                  : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                  : "bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-700"
               }`}
             >
               <svg
@@ -843,7 +1016,7 @@ export function AIAssistantInterface() {
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all ${
                 reasonEnabled
                   ? "bg-brand-purple/10 text-brand-purple hover:bg-brand-purple/20"
-                  : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                  : "bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-700"
               }`}
             >
               <BrainCircuit className="w-3.5 h-3.5" />
@@ -852,7 +1025,15 @@ export function AIAssistantInterface() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
+            <button
+              onClick={toggleListening}
+              className={`p-2 transition-all rounded-full flex items-center justify-center ${
+                isListening
+                  ? "bg-red-500 text-white animate-pulse shadow-md"
+                  : "text-gray-400 dark:text-zinc-400 hover:text-gray-600 dark:hover:text-zinc-200"
+              }`}
+              title={isListening ? "Listening..." : "Start voice input"}
+            >
               <Mic className="w-4 h-4" />
             </button>
             <button
@@ -861,7 +1042,7 @@ export function AIAssistantInterface() {
               className={`w-7 h-7 flex items-center justify-center rounded-full transition-all ${
                 inputValue.trim()
                   ? "bg-brand-purple text-white hover:bg-brand-purple-light"
-                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 cursor-not-allowed"
               }`}
             >
               <ArrowUp className="w-3.5 h-3.5" />
@@ -870,10 +1051,10 @@ export function AIAssistantInterface() {
         </div>
 
         {/* Upload file drawer link */}
-        <div className="px-4 py-2 border-t border-gray-50 bg-white/50">
+        <div className="px-4 py-2 border-t border-gray-50 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50">
           <button
             onClick={handleUploadFile}
-            className="flex items-center gap-1.5 text-gray-500 text-[11px] hover:text-gray-800 transition-colors"
+            className="flex items-center gap-1.5 text-gray-500 dark:text-zinc-400 text-[11px] hover:text-gray-800 dark:hover:text-zinc-200 transition-colors"
           >
             {showUploadAnimation ? (
               <motion.div
@@ -930,13 +1111,13 @@ export function AIAssistantInterface() {
             exit={{ opacity: 0, height: 0 }}
             className="w-full mb-6 overflow-hidden max-w-2xl mx-auto"
           >
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="p-3 border-b border-gray-100 bg-gray-50/50">
-                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+            <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+              <div className="p-3 border-b border-gray-100 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-900/50">
+                <h3 className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
                   {t.suggestionsHeader}
                 </h3>
               </div>
-              <ul className="divide-y divide-gray-150">
+              <ul className="divide-y divide-gray-150 dark:divide-zinc-800">
                 {commandSuggestions[activeCommandCategory as keyof typeof commandSuggestions].map(
                   (suggestion, index) => (
                     <motion.li
@@ -945,7 +1126,7 @@ export function AIAssistantInterface() {
                       animate={{ opacity: 1 }}
                       transition={{ delay: index * 0.03 }}
                       onClick={() => handleCommandSelect(suggestion)}
-                      className="p-3 hover:bg-gray-50 cursor-pointer transition-colors duration-75 text-xs text-gray-700 flex items-center gap-2.5 font-medium"
+                      className="p-3 hover:bg-gray-50 dark:hover:bg-zinc-850 cursor-pointer transition-colors duration-75 text-xs text-gray-700 dark:text-zinc-300 flex items-center gap-2.5 font-medium"
                     >
                       {activeCommandCategory === "browse" ? (
                         <Search className="w-3.5 h-3.5 text-brand-purple" />

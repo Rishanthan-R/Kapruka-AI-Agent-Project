@@ -18,3 +18,6 @@ backend/.env.production
 # Test/debug scripts (may contain API keys)
 backend/test_*.js
 backend/src/test_*.ts
+
+# Debug logs
+backend/logs/

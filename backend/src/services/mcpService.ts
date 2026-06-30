@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { config } from '../config/env'
-import fs from 'fs'
+import { writeDebugLog } from '../utils/debugLogger'
 
 export interface Product {
   id: string
@@ -20,14 +20,7 @@ export interface Product {
  */
 function extractToolResponse(response: unknown, toolName: string): any | null {
   const resAny = response as any
-  try {
-    require('fs').writeFileSync(
-      `C:\\Users\\MSII\\.gemini\\antigravity-ide\\brain\\6f326881-a873-41f4-9d4f-6e9edd5fa271\\mcp_debug_${toolName}.json`,
-      JSON.stringify({ rawResponse: response }, null, 2)
-    )
-  } catch (err) {
-    console.error("Failed to write MCP debug log", err)
-  }
+  writeDebugLog(`mcp_debug_${toolName}.json`, { rawResponse: response })
 
   if (resAny && resAny.content && Array.isArray(resAny.content)) {
     for (const part of resAny.content) {
@@ -172,10 +165,7 @@ export class McpService {
         }
       })
 
-      fs.writeFileSync(
-        "C:\\Users\\MSII\\.gemini\\antigravity-ide\\brain\\6f326881-a873-41f4-9d4f-6e9edd5fa271\\mcp_debug_calls.json",
-        JSON.stringify({ method: "searchProducts", query, response }, null, 2)
-      )
+      writeDebugLog('mcp_debug_calls.json', { method: 'searchProducts', query, response })
 
       const data = extractToolResponse(response, "kapruka_search_products")
       if (data && data.results && Array.isArray(data.results)) {
@@ -189,10 +179,7 @@ export class McpService {
         }))
       }
     } catch (err: any) {
-      fs.writeFileSync(
-        "C:\\Users\\MSII\\.gemini\\antigravity-ide\\brain\\6f326881-a873-41f4-9d4f-6e9edd5fa271\\mcp_debug_calls.json",
-        JSON.stringify({ method: "searchProducts", query, error: err.message || err }, null, 2)
-      )
+      writeDebugLog('mcp_debug_calls.json', { method: 'searchProducts', query, error: err.message || err })
       throw err
     }
     
@@ -248,10 +235,7 @@ export class McpService {
         }
       })
 
-      fs.writeFileSync(
-        "C:\\Users\\MSII\\.gemini\\antigravity-ide\\brain\\6f326881-a873-41f4-9d4f-6e9edd5fa271\\mcp_debug_calls.json",
-        JSON.stringify({ method: "quoteDelivery", city, response }, null, 2)
-      )
+      writeDebugLog('mcp_debug_calls.json', { method: 'quoteDelivery', city, response })
 
       const data = extractToolResponse(response, "kapruka_check_delivery")
       if (data && typeof data === 'object') {
@@ -280,10 +264,7 @@ export class McpService {
         }
       }
     } catch (err: any) {
-      fs.writeFileSync(
-        "C:\\Users\\MSII\\.gemini\\antigravity-ide\\brain\\6f326881-a873-41f4-9d4f-6e9edd5fa271\\mcp_debug_calls.json",
-        JSON.stringify({ method: "quoteDelivery", city, error: err.message || err }, null, 2)
-      )
+      writeDebugLog('mcp_debug_calls.json', { method: 'quoteDelivery', city, error: err.message || err })
       throw err
     }
     
