@@ -37,7 +37,7 @@ export interface Message {
   timestamp: Date | string
   products?: Product[]
   deliveryQuote?: DeliveryQuote
-  checkoutLink?: string
+  checkoutLink?: string | null
   orderStatus?: {
     id: string
     status: string
