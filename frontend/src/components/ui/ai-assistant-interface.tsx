@@ -61,7 +61,7 @@ export function AIAssistantInterface() {
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [showUploadAnimation, setShowUploadAnimation] = useState(false);
   const [activeCommandCategory, setActiveCommandCategory] = useState<string | null>(null);
-  const [isCartOpen, setIsCartOpen] = useState(true);
+  const [isCartOpen, setIsCartOpen] = useState(false);
 
   // Delivery quote states
   const [recipientName, setRecipientName] = useState("");
@@ -281,7 +281,7 @@ export function AIAssistantInterface() {
         {/* Content Area */}
         {isLandingState ? (
           /* Landing State UI (Centered Input + Grid Suggestions) */
-          <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center p-6 bg-white">
+          <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center p-6 bg-white dark:bg-zinc-950">
             <div className="w-full max-w-2xl mx-auto flex flex-col items-center">
               
               {/* Logo */}
@@ -603,7 +603,7 @@ export function AIAssistantInterface() {
                 {renderInputBox()}
                 
                 {/* Suggestions pill tabs inside chat */}
-                <div className="flex gap-2 justify-center mt-1">
+                <div className="flex gap-2 justify-center mt-1 flex-wrap">
                   {(["browse", "gifts", "delivery"] as const).map((cat) => (
                     <button
                       key={cat}
@@ -632,13 +632,20 @@ export function AIAssistantInterface() {
       {/* Persistent/Slide-out Cart Panel */}
       <AnimatePresence>
         {isCartOpen && (
-          <motion.aside
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 350, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: "easeInOut" }}
-            className="h-full bg-white dark:bg-zinc-950 border-l border-gray-100 dark:border-zinc-900 flex flex-col z-10 shadow-lg relative shrink-0"
-          >
+          <>
+            {/* Backdrop overlay on mobile screens */}
+            <div 
+              className="fixed inset-0 bg-black/20 dark:bg-black/40 z-15 md:hidden"
+              onClick={() => setIsCartOpen(false)}
+            />
+            
+            <motion.aside
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 350, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.25, ease: "easeInOut" }}
+              className="h-full bg-white dark:bg-zinc-950 border-l border-gray-100 dark:border-zinc-900 flex flex-col z-20 shadow-lg absolute right-0 top-0 md:relative w-full max-w-[320px] sm:max-w-[350px] md:max-w-none shrink-0"
+            >
             {/* Cart Header */}
             <div className="p-4 border-b border-gray-100 dark:border-zinc-900 flex items-center justify-between bg-gray-50/50 dark:bg-zinc-900/50">
               <div className="flex items-center gap-2 font-bold text-sm text-gray-800 dark:text-zinc-200">
@@ -849,6 +856,7 @@ export function AIAssistantInterface() {
               </div>
             )}
           </motion.aside>
+          </>
         )}
       </AnimatePresence>
 
