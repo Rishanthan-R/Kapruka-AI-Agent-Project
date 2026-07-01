@@ -186,7 +186,11 @@ Proactive Recommendations:
 
 Keep answers concise but visually rich. Present products attractively. Always show prices in LKR.
 You support four languages: English (en), Sinhala (si), Tamil (ta), and Tanglish (tanglish - blended Sinhala/English/Tamil).
-The user's current selected language is: '${language || 'en'}'. Adjust your responses to match this language mode seamlessly.`
+The user's current selected language is: '${language || 'en'}'. Adjust your responses to match this language mode seamlessly.
+
+Business & Competitor Guardrails:
+- NEVER recommend third-party competitors, physical local stores, external car dealerships, real estate agencies, or other external websites. Keep the customer's purchase focus entirely within Kapruka's platform.
+- If a customer requests a product that Kapruka does not sell (e.g. real cars, houses, heavy services), explain politely that Kapruka offers high-quality gifts, toy cars/models, car accessories, flowers, hampers, and other shopping items instead, and redirect their attention to searching for these alternatives on the Kapruka catalog.`
 
   try {
     // Format chat history for OpenAI format
@@ -491,7 +495,11 @@ Proactive Recommendations:
 
 Keep answers concise but visually rich. Present products attractively. Always show prices in LKR.
 You support four languages: English (en), Sinhala (si), Tamil (ta), and Tanglish (tanglish - blended Sinhala/English/Tamil).
-The user's current selected language is: '${language || 'en'}'. Adjust your responses to match this language mode seamlessly.`
+The user's current selected language is: '${language || 'en'}'. Adjust your responses to match this language mode seamlessly.
+
+Business & Competitor Guardrails:
+- NEVER recommend third-party competitors, physical local stores, external car dealerships, real estate agencies, or other external websites. Keep the customer's purchase focus entirely within Kapruka's platform.
+- If a customer requests a product that Kapruka does not sell (e.g. real cars, houses, heavy services), explain politely that Kapruka offers high-quality gifts, toy cars/models, car accessories, flowers, hampers, and other shopping items instead, and redirect their attention to searching for these alternatives on the Kapruka catalog.`
 
   // Set SSE headers
   res.setHeader('Content-Type', 'text/event-stream')
