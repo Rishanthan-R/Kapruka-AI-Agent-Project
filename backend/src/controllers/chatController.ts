@@ -245,7 +245,33 @@ The user's current selected language is: '${language || 'en'}'. Adjust your resp
     } catch (err: any) {
       console.warn("⚠️ Tool-calling request failed. Checking failed_generation in error...", err)
       const failedGen = err.error?.failed_generation || err.failed_generation
-      if (failedGen) {
+      
+      if (!failedGen) {
+        console.warn("🔄 Primary provider failed in chatHandler. Triggering failover fallback to Hugging Face...")
+        try {
+          const hfToken = config.hfToken
+          const fallbackOpenai = new OpenAI({
+            apiKey: hfToken,
+            baseURL: 'https://router.huggingface.co/v1'
+          })
+          completion = await fallbackOpenai.chat.completions.create({
+            model: config.huggingfaceModel || 'mistralai/Mistral-7B-Instruct-v0.2',
+            messages,
+            tools: shoppingTools,
+            tool_choice: "auto",
+            max_tokens: config.aiMaxTokens,
+            temperature: config.aiTemperature
+          })
+          choice = completion.choices[0]
+          messageObj = choice.message
+          toolCalls = extractToolCalls(messageObj)
+          console.log("✅ Hugging Face non-streaming failover succeeded!")
+        } catch (hfErr: any) {
+          console.error("❌ Hugging Face non-streaming failover failed:", hfErr)
+        }
+      }
+
+      if (toolCalls.length === 0 && failedGen) {
         console.log("🎯 Extracted failed_generation XML from error:", failedGen)
         messageObj = {
           role: 'assistant',
@@ -254,7 +280,7 @@ The user's current selected language is: '${language || 'en'}'. Adjust your resp
         toolCalls = extractToolCalls(messageObj)
       }
       
-      if (toolCalls.length === 0) {
+      if (toolCalls.length === 0 && !messageObj) {
         console.warn("⚠️ Bypassing tool calling. Attempting fallback call without tools...")
         writeDebugLog('groq_debug.json', {
           context: 'inner_tool_call_failed',
@@ -264,15 +290,39 @@ The user's current selected language is: '${language || 'en'}'. Adjust your resp
           failed_generation: failedGen || null,
           stack: err.stack
         })
-        completion = await openai.chat.completions.create({
-          model: modelName,
-          messages,
-          max_tokens: config.aiMaxTokens,
-          temperature: config.aiTemperature
-        })
-        choice = completion.choices[0]
-        messageObj = choice.message
-        toolCalls = extractToolCalls(messageObj)
+        try {
+          completion = await openai.chat.completions.create({
+            model: modelName,
+            messages,
+            max_tokens: config.aiMaxTokens,
+            temperature: config.aiTemperature
+          })
+          choice = completion.choices[0]
+          messageObj = choice.message
+          toolCalls = extractToolCalls(messageObj)
+        } catch (innerErr: any) {
+          console.warn("🔄 Inner call failed. Triggering secondary Hugging Face failover...")
+          try {
+            const hfToken = config.hfToken
+            const fallbackOpenai = new OpenAI({
+              apiKey: hfToken,
+              baseURL: 'https://router.huggingface.co/v1'
+            })
+            completion = await fallbackOpenai.chat.completions.create({
+              model: config.huggingfaceModel || 'mistralai/Mistral-7B-Instruct-v0.2',
+              messages,
+              max_tokens: config.aiMaxTokens,
+              temperature: config.aiTemperature
+            })
+            choice = completion.choices[0]
+            messageObj = choice.message
+            toolCalls = extractToolCalls(messageObj)
+            console.log("✅ Hugging Face secondary failover succeeded!")
+          } catch (hfErr2: any) {
+            console.error("❌ Secondary Hugging Face failover failed:", hfErr2)
+            throw innerErr
+          }
+        }
       }
     }
 
@@ -503,7 +553,27 @@ The user's current selected language is: '${language || 'en'}'. Adjust your resp
         console.warn("⚠️ Streaming request failed, checking failed_generation in error...", err)
         failedGen = err.error?.failed_generation || err.failed_generation
         if (!failedGen) {
-          throw err
+          console.warn("🔄 Primary provider failed. Triggering failover fallback to Hugging Face...")
+          try {
+            const hfToken = config.hfToken
+            const fallbackOpenai = new OpenAI({
+              apiKey: hfToken,
+              baseURL: 'https://router.huggingface.co/v1'
+            })
+            stream = await fallbackOpenai.chat.completions.create({
+              model: config.huggingfaceModel || 'mistralai/Mistral-7B-Instruct-v0.2',
+              messages,
+              tools: shoppingTools,
+              tool_choice: "auto",
+              max_tokens: config.aiMaxTokens,
+              temperature: config.aiTemperature,
+              stream: true
+            })
+            console.log("✅ Hugging Face failover stream initialized successfully!")
+          } catch (hfErr: any) {
+            console.error("❌ Hugging Face failover fallback failed as well:", hfErr)
+            throw err
+          }
         }
       }
 
