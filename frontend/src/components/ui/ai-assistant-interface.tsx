@@ -22,10 +22,10 @@ import {
   CreditCard,
   Sun,
   Moon,
+  Settings,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore, translations } from "../../store/useStore";
-import type { Language } from "../../store/useStore";
 import brandLogo from "../../assets/kapruka_ai_agent_logo.png";
 
 export function AIAssistantInterface() {
@@ -62,6 +62,7 @@ export function AIAssistantInterface() {
   const [showUploadAnimation, setShowUploadAnimation] = useState(false);
   const [activeCommandCategory, setActiveCommandCategory] = useState<string | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Delivery quote states
   const [recipientName, setRecipientName] = useState("");
@@ -223,45 +224,50 @@ export function AIAssistantInterface() {
       <div className="flex-1 flex flex-col h-full bg-white dark:bg-zinc-950 relative overflow-hidden">
         
         {/* Navigation / Header */}
-        <header className="h-16 border-b border-brand-purple-light/10 px-6 flex items-center justify-between bg-brand-purple text-white z-10 shrink-0 shadow-md">
+        <header className="h-16 border-b border-brand-purple-light/10 px-4 md:px-6 flex items-center justify-between bg-brand-purple text-white z-20 shrink-0 shadow-md relative">
           <div className="flex items-center gap-3">
-            <img src={brandLogo} className="h-11 w-auto object-contain rounded" alt="Kapruka AI Shopping Agent" />
+            <img src={brandLogo} className="h-9 md:h-11 w-auto object-contain rounded" alt="Kapruka AI Shopping Agent" />
           </div>
 
-          {/* Localization Pill & Cart Trigger */}
-          <div className="flex items-center gap-3">
-            <div className="bg-white/10 p-0.5 rounded-full flex items-center border border-white/10">
-              <Globe className="w-3.5 h-3.5 text-brand-yellow ml-2" />
-              {(["en", "si", "ta", "tanglish"] as Language[]).map((lang) => (
-                <button
-                  key={lang}
-                  onClick={() => setLanguage(lang)}
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase transition-all ${
-                    language === lang
-                      ? "bg-brand-yellow text-brand-purple shadow-sm"
-                      : "text-purple-200 hover:text-white"
-                  }`}
-                >
-                  {lang === "tanglish" ? "Tang" : lang}
-                </button>
-              ))}
+          <div className="flex items-center gap-2 md:gap-4">
+            
+            {/* Desktop Actions */}
+            <div className="hidden md:flex items-center gap-4">
+              {/* Language Selector */}
+              <div className="bg-white/10 p-0.5 rounded-full flex items-center border border-white/10">
+                <Globe className="w-3.5 h-3.5 text-brand-yellow ml-2" />
+                {(["en", "si", "ta", "tanglish"] as const).map((lang) => (
+                  <button
+                    key={lang}
+                    onClick={() => setLanguage(lang)}
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase transition-all ${
+                      language === lang
+                        ? "bg-brand-yellow text-brand-purple shadow-sm"
+                        : "text-purple-200 hover:text-white"
+                    }`}
+                  >
+                    {lang === "tanglish" ? "Tang" : lang}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={clearChat}
+                className="text-xs px-2.5 py-1 rounded-md border border-white/20 hover:bg-white/10 transition-all text-white font-bold"
+              >
+                Clear
+              </button>
+
+              <button
+                onClick={toggleDarkMode}
+                className="p-2 rounded-full border border-white/20 bg-white/10 hover:bg-white/20 text-purple-200 hover:text-white transition-all"
+                title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              >
+                {darkMode ? <Sun className="w-4 h-4 text-brand-yellow" /> : <Moon className="w-4 h-4 text-purple-200" />}
+              </button>
             </div>
 
-            <button
-              onClick={clearChat}
-              className="text-xs px-2.5 py-1 rounded-md border border-white/20 hover:bg-white/10 transition-all text-white font-bold"
-            >
-              Clear
-            </button>
-
-            <button
-              onClick={toggleDarkMode}
-              className="p-2 rounded-full border border-white/20 bg-white/10 hover:bg-white/20 text-purple-200 hover:text-white transition-all"
-              title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-            >
-              {darkMode ? <Sun className="w-4 h-4 text-brand-yellow" /> : <Moon className="w-4 h-4 text-purple-200" />}
-            </button>
-
+            {/* Cart Trigger (Visible on both Mobile & Desktop) */}
             <button
               onClick={() => setIsCartOpen(!isCartOpen)}
               className={`relative p-2 rounded-full border transition-all ${
@@ -275,7 +281,73 @@ export function AIAssistantInterface() {
                 </span>
               )}
             </button>
+
+            {/* Mobile Settings Toggle */}
+            <button
+              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+              className={`md:hidden p-2 rounded-full border transition-all ${
+                isSettingsOpen ? "bg-white/20 border-white/30 text-white" : "bg-white/10 border-white/20 text-purple-200 hover:bg-white/20"
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+            </button>
           </div>
+
+          {/* Mobile Settings Dropdown/Popover */}
+          <AnimatePresence>
+            {isSettingsOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.15 }}
+                className="absolute right-4 top-18 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl shadow-lg p-4 z-30 flex flex-col gap-3.5 min-w-[240px] text-gray-800 dark:text-zinc-200 md:hidden"
+              >
+                {/* Language selection block */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-450 dark:text-zinc-500">Language</span>
+                  <div className="grid grid-cols-4 bg-gray-50 dark:bg-zinc-950 rounded-lg p-0.5 border border-gray-100 dark:border-zinc-800 text-xs">
+                    {(["en", "si", "ta", "tanglish"] as const).map((lang) => (
+                      <button
+                        key={lang}
+                        onClick={() => setLanguage(lang)}
+                        className={`py-1 rounded-md uppercase font-black text-center transition-all ${
+                          language === lang
+                            ? "bg-brand-purple text-white shadow-sm"
+                            : "text-gray-500 dark:text-zinc-400 hover:text-gray-800 dark:hover:text-zinc-200"
+                        }`}
+                      >
+                        {lang === "tanglish" ? "Tang" : lang}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Dark mode & Clear actions row */}
+                <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-zinc-800">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-450 dark:text-zinc-500">Theme</span>
+                    <button
+                      onClick={toggleDarkMode}
+                      className="p-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-950 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800"
+                    >
+                      {darkMode ? <Sun className="w-3.5 h-3.5 text-brand-yellow" /> : <Moon className="w-3.5 h-3.5 text-brand-purple" />}
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      clearChat();
+                      setIsSettingsOpen(false);
+                    }}
+                    className="text-[10px] px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-bold border border-red-100 dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-450 transition-colors"
+                  >
+                    Clear History
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </header>
 
         {/* Content Area */}
